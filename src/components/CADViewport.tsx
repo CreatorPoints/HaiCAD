@@ -245,13 +245,22 @@ export const CADViewport = forwardRef<CADViewportHandle, CADViewportProps>(
       const group = meshGroupRef.current;
       if (!group) return;
 
-      // Clear existing geometry
+      // Clear existing geometry & prevent WebGL memory leaks
       while (group.children.length > 0) {
         const child = group.children[0] as THREE.Mesh;
         if (child.geometry) child.geometry.dispose();
         if (child.material) {
           if (Array.isArray(child.material)) child.material.forEach((m) => m.dispose());
           else child.material.dispose();
+        }
+        if (child.children) {
+          child.children.forEach((c: any) => {
+            if (c.geometry) c.geometry.dispose();
+            if (c.material) {
+              if (Array.isArray(c.material)) c.material.forEach((m: any) => m.dispose());
+              else c.material.dispose();
+            }
+          });
         }
         group.remove(child);
       }
