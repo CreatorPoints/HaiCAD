@@ -14,6 +14,14 @@ export interface OpenRouterCompletionOptions {
   maxTokens?: number;
 }
 
+export const FREE_MODELS_PRESETS = [
+  'inclusionai/ling-3.0-flash-fin:free',
+  'dots-studio/dots-3-note-preview:free',
+  'meta-llama/llama-3.3-70b-instruct:free',
+  'mistralai/mistral-7b-instruct:free',
+  'qwen/qwen-2.5-coder-32b-instruct:free',
+];
+
 export const DEFAULT_OPENROUTER_MODEL = 'inclusionai/ling-3.0-flash-fin:free';
 const STORAGE_KEY_API_KEY = 'haicad_openrouter_api_key';
 const STORAGE_KEY_MODEL = 'haicad_openrouter_model';

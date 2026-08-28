@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import { CadPhase, VerificationAction } from '../../types/aiCadTypes';
 import { useAiCad } from '../../hooks/useAiCad';
+import { FREE_MODELS_PRESETS } from '../../services/openRouterService';
 
 interface AIChatPanelProps {
   aiCad: ReturnType<typeof useAiCad>;
@@ -133,12 +134,7 @@ export const AIChatPanel: React.FC<AIChatPanelProps> = ({ aiCad, onApplyCodeToId
                   className="w-full px-3 py-2 text-xs bg-surface-subtle border border-surface-border rounded-xl text-white placeholder:text-slate-500 focus:outline-none focus:border-cyan font-mono"
                 />
                 <div className="flex flex-wrap gap-1 pt-1">
-                  {[
-                    'inclusionai/ling-3.0-flash-fin:free',
-                    'meta-llama/llama-3.3-70b-instruct:free',
-                    'mistralai/mistral-7b-instruct:free',
-                    'qwen/qwen-2.5-coder-32b-instruct:free',
-                  ].map((m) => (
+                  {FREE_MODELS_PRESETS.map((m) => (
                     <button
                       key={m}
                       type="button"
@@ -149,7 +145,7 @@ export const AIChatPanel: React.FC<AIChatPanelProps> = ({ aiCad, onApplyCodeToId
                           : 'bg-surface border-surface-border text-slate-400 hover:text-white'
                       }`}
                     >
-                      {m.split('/')[1] || m}
+                      {m.split('/')[1]?.replace(':free', '') || m}
                     </button>
                   ))}
                 </div>
