@@ -14,6 +14,7 @@ import {
   loadKeyPool,
   saveKeyPool,
   fetchOpenRouterModels,
+  fetchGeminiModels,
   KeyRotationEvent,
 } from './services/aiService';
 import { ArrowRightLeft, CheckCircle2, AlertTriangle, X } from 'lucide-react';
@@ -57,17 +58,27 @@ export const App: React.FC = () => {
   const pingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const toastTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
-  // Fetch OpenRouter dynamic catalog on load to populate procedural models
-  useEffect(() => {
-    fetchOpenRouterModels().then((fetched) => {
-      if (fetched && fetched.length > 0) {
-        // Keep free models only
-        const freeFetched = fetched.filter((m) => m.isFree || m.id.endsWith(':free'));
-        const geminiDefaults = DEFAULT_MODELS.filter((m) => m.provider === 'gemini');
-        setAvailableModels([...geminiDefaults, ...freeFetched]);
-      }
-    });
+  // Fetch dynamic catalogs from Google Gemini and OpenRouter
+  const refreshModelCatalogs = useCallback(async () => {
+    try {
+      const [geminiLive, openRouterLive] = await Promise.all([
+        fetchGeminiModels(),
+        fetchOpenRouterModels(),
+      ]);
+
+      const freeOpenRouter = openRouterLive.filter((m) => m.isFree || m.id.endsWith(':free'));
+      const activeGemini = geminiLive.length > 0 ? geminiLive : DEFAULT_MODELS.filter((m) => m.provider === 'gemini' && m.id !== 'auto-smart');
+      const autoRouter = DEFAULT_MODELS[0];
+
+      setAvailableModels([autoRouter, ...activeGemini, ...freeOpenRouter]);
+    } catch (e) {
+      console.warn('Failed to refresh model catalogs:', e);
+    }
   }, []);
+
+  useEffect(() => {
+    refreshModelCatalogs();
+  }, [refreshModelCatalogs]);
 
   // Compile / Rebuild Code
   const runCode = useCallback(async (codeToRun: string) => {

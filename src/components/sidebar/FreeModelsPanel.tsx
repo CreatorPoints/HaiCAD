@@ -20,6 +20,7 @@ import {
   AIModelOption,
   DEFAULT_MODELS,
   fetchOpenRouterModels,
+  fetchGeminiModels,
 } from '../../services/aiService';
 import { MODEL_CAPABILITY_PROFILES } from '../../services/modelRouter';
 
@@ -42,20 +43,26 @@ export const FreeModelsPanel: React.FC<FreeModelsPanelProps> = ({
   const [filterCategory, setFilterCategory] = useState<FilterCategory>('free');
   const [lastFetched, setLastFetched] = useState<Date | null>(null);
 
-  // Load models on mount
+  // Load live models from Google and OpenRouter
   const loadModels = async () => {
     setIsLoading(true);
     try {
-      const fetched = await fetchOpenRouterModels();
-      if (fetched && fetched.length > 0) {
-        // Merge with Gemini defaults
-        const geminiModels = DEFAULT_MODELS.filter((m) => m.provider === 'gemini');
-        const combined = [...geminiModels, ...fetched];
-        setModels(combined);
-        setLastFetched(new Date());
-      }
+      const [geminiLive, openRouterLive] = await Promise.all([
+        fetchGeminiModels(),
+        fetchOpenRouterModels(),
+      ]);
+
+      const freeOpenRouter = openRouterLive.filter((m) => m.isFree || m.id.endsWith(':free'));
+      const activeGemini =
+        geminiLive.length > 0
+          ? geminiLive
+          : DEFAULT_MODELS.filter((m) => m.provider === 'gemini');
+
+      const combined = [...activeGemini, ...freeOpenRouter];
+      setModels(combined);
+      setLastFetched(new Date());
     } catch (e) {
-      console.warn('Could not fetch OpenRouter models:', e);
+      console.warn('Could not fetch models:', e);
     } finally {
       setIsLoading(false);
     }

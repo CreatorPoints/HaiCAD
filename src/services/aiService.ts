@@ -70,26 +70,44 @@ export const DEFAULT_MODELS: AIModelOption[] = [
     recommended: true,
     isCodeSuited: true,
     isFree: true,
-    description: 'Fastest Google multi-modal model for real-time CAD code generation (Google AI Studio Free Quota).',
+    description: 'Google workhorse model for high-speed CAD code generation (Google AI Studio Free Quota).',
   },
   {
-    id: 'gemini-2.5-pro',
-    name: 'Gemini 2.5 Pro (Free Tier)',
+    id: 'gemini-3.1-pro-preview',
+    name: 'Gemini 3.1 Pro (Free Tier)',
     provider: 'gemini',
     badge: 'Free Reasoning',
     isCodeSuited: true,
     isReasoning: true,
     isFree: true,
-    description: 'Premier Google reasoning model for complex geometric constraints and math (Google AI Studio Free Quota).',
+    description: 'Google reasoning champion for complex geometric constraints and math (Google AI Studio Free Quota).',
   },
   {
-    id: 'gemini-2.0-flash',
-    name: 'Gemini 2.0 Flash (Free Tier)',
+    id: 'gemini-3.6-flash',
+    name: 'Gemini 3.6 Flash (Free Tier)',
     provider: 'gemini',
-    badge: 'Free Reliable',
+    badge: 'Free Ultra Fast',
     isCodeSuited: true,
     isFree: true,
-    description: 'Reliable Google model with strong parametric syntax support (Google AI Studio Free Quota).',
+    description: 'Next-gen Google Flash model with high token generation speeds (Google AI Studio Free Quota).',
+  },
+  {
+    id: 'gemini-2.5-flash-lite',
+    name: 'Gemini 2.5 Flash-Lite (Free Tier)',
+    provider: 'gemini',
+    badge: 'Free Lite',
+    isCodeSuited: true,
+    isFree: true,
+    description: 'Lightweight, low-latency Google model for quick parametric changes (Google AI Studio Free Quota).',
+  },
+  {
+    id: 'gemma-4-31b-it',
+    name: 'Gemma 4 31B (Google Free Tier)',
+    provider: 'gemini',
+    badge: 'Free Gemma',
+    isCodeSuited: true,
+    isFree: true,
+    description: 'High-parameter Google open weights instruction model.',
   },
   {
     id: 'nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free',
@@ -98,7 +116,7 @@ export const DEFAULT_MODELS: AIModelOption[] = [
     badge: 'Free Reasoning',
     isFree: true,
     isReasoning: true,
-    description: 'Free NVIDIA reasoning model for geometric constraint calculations and math.',
+    description: 'Free NVIDIA reasoning model on OpenRouter for geometric constraint calculations.',
   },
   {
     id: 'cohere/north-mini-code:free',
@@ -116,7 +134,7 @@ export const DEFAULT_MODELS: AIModelOption[] = [
     badge: 'Free Gemma',
     isFree: true,
     isCodeSuited: true,
-    description: 'Free high-parameter instruction model with broad mathematical capabilities.',
+    description: 'Free high-parameter instruction model on OpenRouter with broad mathematical capabilities.',
   },
   {
     id: 'z-ai/glm-5.2:free',
@@ -316,6 +334,78 @@ export async function fetchOpenRouterModels(): Promise<AIModelOption[]> {
     return parsedModels;
   } catch (err) {
     console.warn('Failed to fetch live OpenRouter models:', err);
+    return [];
+  }
+}
+
+// Fetch live Google Gemini models catalog for the user's active API key
+export async function fetchGeminiModels(providedKey?: string): Promise<AIModelOption[]> {
+  const pool = loadKeyPool();
+  const activeKey =
+    providedKey?.trim() ||
+    pool.find((k) => k.provider === 'gemini' && k.isActive)?.key ||
+    localStorage.getItem('haicad_gemini_key') ||
+    '';
+
+  if (!activeKey) return [];
+
+  try {
+    const res = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models?key=${activeKey.trim()}&pageSize=100`
+    );
+    if (!res.ok) {
+      console.warn(`Gemini listModels API returned status ${res.status}`);
+      return [];
+    }
+    const json = await res.json();
+    const rawList: any[] = json.models || [];
+
+    // Filter to generateContent text/code models, excluding specialized video/audio/embedding models
+    const supported = rawList.filter(
+      (m: any) =>
+        Array.isArray(m.supportedGenerationMethods) &&
+        m.supportedGenerationMethods.includes('generateContent') &&
+        !m.name.includes('embedding') &&
+        !m.name.includes('aqa') &&
+        !m.name.includes('tts') &&
+        !m.name.includes('transcribe') &&
+        !m.name.includes('veo') &&
+        !m.name.includes('robotics') &&
+        !m.name.includes('customtools')
+    );
+
+    const parsed: AIModelOption[] = supported.map((m: any) => {
+      const id = m.name.replace('models/', '');
+      const displayName = m.displayName || id;
+      const isReasoning = id.includes('pro') || displayName.toLowerCase().includes('pro');
+      const isCode =
+        id.includes('flash') ||
+        id.includes('coder') ||
+        displayName.toLowerCase().includes('flash') ||
+        id.includes('gemma');
+
+      let badge = 'Free Tier';
+      if (isReasoning) badge = 'Free Reasoning';
+      else if (isCode) badge = 'Free Code';
+
+      return {
+        id,
+        name: displayName.includes('Free') ? displayName : `${displayName} (Free Tier)`,
+        provider: 'gemini' as const,
+        badge,
+        isFree: true,
+        isCodeSuited: isCode,
+        isReasoning,
+        contextLength: m.inputTokenLimit,
+        description:
+          m.description ||
+          `Official Google Generative AI model with ${m.inputTokenLimit?.toLocaleString() || '1M'} input token limit.`,
+      };
+    });
+
+    return parsed;
+  } catch (err) {
+    console.warn('Failed to fetch real Gemini models:', err);
     return [];
   }
 }
