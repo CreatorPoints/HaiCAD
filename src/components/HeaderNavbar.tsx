@@ -9,6 +9,7 @@ import {
   ChevronLeft,
   Edit2,
   ChevronDown,
+  BookOpen,
 } from 'lucide-react';
 import { SidebarTab } from './sidebar/LeftSidebar';
 
@@ -21,6 +22,7 @@ interface HeaderNavbarProps {
   projectId?: string;
   onGoToDashboard?: () => void;
   onRenameProject?: (newName: string) => void;
+  onOpenDocs?: () => void;
 }
 
 export const HeaderNavbar: React.FC<HeaderNavbarProps> = ({
@@ -32,6 +34,7 @@ export const HeaderNavbar: React.FC<HeaderNavbarProps> = ({
   projectId,
   onGoToDashboard,
   onRenameProject,
+  onOpenDocs,
 }) => {
   const [showExportMenu, setShowExportMenu] = useState(false);
   const [isEditingTitle, setIsEditingTitle] = useState(false);
@@ -79,44 +82,44 @@ export const HeaderNavbar: React.FC<HeaderNavbarProps> = ({
         {projectId && (
           <div className="hidden sm:flex items-center gap-2">
             {isEditingTitle ? (
-              <form onSubmit={handleSaveTitle} className="flex items-center gap-1">
+              <form onSubmit={handleSaveTitle} className="flex items-center gap-1.5">
                 <input
                   type="text"
                   value={titleInput}
                   onChange={(e) => setTitleInput(e.target.value)}
-                  autoFocus
                   onBlur={() => handleSaveTitle()}
-                  className="px-2 py-0.5 rounded bg-background border border-cyan text-xs text-white focus:outline-none"
+                  autoFocus
+                  className="px-2 py-0.5 text-xs bg-surface-subtle border border-cyan rounded-lg text-white font-medium focus:outline-none"
                 />
               </form>
             ) : (
               <button
                 type="button"
                 onClick={() => {
-                  setTitleInput(projectName || '');
+                  setTitleInput(projectName || 'Workspace');
                   setIsEditingTitle(true);
                 }}
-                className="flex items-center gap-1.5 px-2 py-0.5 rounded-lg hover:bg-surface-subtle text-xs text-white font-semibold transition-all group"
+                className="group flex items-center gap-1.5 text-xs text-slate-300 hover:text-white transition-colors"
+                title="Click to rename project"
               >
-                <span className="truncate max-w-[180px]">{projectName || 'Untitled CAD'}</span>
-                <span className="text-[10px] font-mono px-1.5 py-0.2 rounded bg-cyan/15 text-cyan-glow border border-cyan/30">
-                  /project/{projectId}
+                <span className="font-medium max-w-[160px] truncate">
+                  {projectName || 'Workspace'}
                 </span>
-                <Edit2 className="w-3 h-3 text-slate-400 opacity-0 group-hover:opacity-100 transition-opacity" />
+                <Edit2 className="w-3 h-3 opacity-0 group-hover:opacity-100 text-slate-400" />
               </button>
             )}
           </div>
         )}
 
-        {/* Quick Nav Chips */}
-        <div className="hidden sm:flex items-center gap-1.5">
+        {/* Navigation Quick Tabs */}
+        <div className="hidden md:flex items-center gap-1 ml-4 border-l border-surface-border pl-4">
           <button
             type="button"
             onClick={() => onOpenTab('ai_chat')}
             className={`flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-xs font-semibold transition-all ${
               activeTab === 'ai_chat'
-                ? 'bg-cyan text-black shadow-md shadow-cyan/20 font-bold'
-                : 'text-cyan hover:text-white hover:bg-surface-subtle border border-cyan/30'
+                ? 'bg-cyan text-black shadow-sm font-bold'
+                : 'text-slate-300 hover:text-white hover:bg-surface-subtle border border-transparent'
             }`}
           >
             <Sparkles className="w-3.5 h-3.5" />
@@ -125,15 +128,15 @@ export const HeaderNavbar: React.FC<HeaderNavbarProps> = ({
 
           <button
             type="button"
-            onClick={() => onOpenTab('view_tools')}
+            onClick={() => onOpenTab('cad_features')}
             className={`flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-xs font-medium transition-all ${
-              activeTab === 'view_tools'
-                ? 'bg-primary/20 text-primary-glow border border-primary/40'
+              activeTab === 'cad_features'
+                ? 'bg-amber-400 text-black font-bold shadow-sm'
                 : 'text-slate-300 hover:text-white hover:bg-surface-subtle border border-transparent'
             }`}
           >
-            <SlidersHorizontal className="w-3.5 h-3.5" />
-            <span>View Tools</span>
+            <Box className="w-3.5 h-3.5" />
+            <span>Feature Tree</span>
           </button>
 
           <button
@@ -141,18 +144,31 @@ export const HeaderNavbar: React.FC<HeaderNavbarProps> = ({
             onClick={() => onOpenTab('ide')}
             className={`flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-xs font-medium transition-all ${
               activeTab === 'ide'
-                ? 'bg-primary/20 text-primary-glow border border-primary/40'
+                ? 'bg-primary text-white font-bold shadow-sm'
                 : 'text-slate-300 hover:text-white hover:bg-surface-subtle border border-transparent'
             }`}
           >
             <Code2 className="w-3.5 h-3.5" />
-            <span>CAD Script IDE</span>
+            <span>Script IDE</span>
           </button>
         </div>
       </div>
 
-      {/* Right Controls (Export, GitHub) */}
-      <div className="flex items-center gap-2.5">
+      {/* Right Controls (Docs, Export) */}
+      <div className="flex items-center gap-2">
+        {/* Complete OpenCASCADE / Replicad API Docs Button */}
+        {onOpenDocs && (
+          <button
+            type="button"
+            onClick={onOpenDocs}
+            title="Open Complete OpenCASCADE & Replicad CAD Kernel API Docs"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-surface hover:bg-surface-subtle border border-cyan/30 text-cyan hover:text-white text-xs font-semibold transition-all shadow-sm cursor-pointer"
+          >
+            <BookOpen className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">CAD API Docs</span>
+          </button>
+        )}
+
         {/* Export Dropdown */}
         <div className="relative">
           <button
@@ -162,7 +178,7 @@ export const HeaderNavbar: React.FC<HeaderNavbarProps> = ({
             className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold shadow-md shadow-emerald-900/30 transition-all disabled:opacity-50 cursor-pointer"
           >
             <Download className="w-3.5 h-3.5" />
-            <span>{isExporting ? 'Exporting...' : 'Export CAD'}</span>
+            <span>{isExporting ? 'Exporting...' : 'Export'}</span>
             <ChevronDown className="w-3 h-3 ml-0.5" />
           </button>
 
@@ -198,28 +214,15 @@ export const HeaderNavbar: React.FC<HeaderNavbarProps> = ({
               >
                 <div>
                   <div className="font-semibold text-white">STL (.stl)</div>
-                  <div className="text-[10px] text-slate-400">Binary 3D Printing Mesh</div>
+                  <div className="text-[10px] text-slate-400">3D Printing Mesh</div>
                 </div>
-                <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-surface-subtle text-slate-300">
-                  3D Print
+                <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-surface-subtle text-emerald-400">
+                  Mesh
                 </span>
               </button>
             </div>
           )}
         </div>
-
-        {/* GitHub Link */}
-        <a
-          href="https://github.com/CreatorPoints/HaiCAD"
-          target="_blank"
-          rel="noreferrer"
-          aria-label="GitHub Repository"
-          className="p-2 text-slate-400 hover:text-white hover:bg-surface-subtle rounded-xl border border-surface-border transition-all"
-        >
-          <svg className="w-4 h-4 fill-current" viewBox="0 0 24 24">
-            <path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z" />
-          </svg>
-        </a>
       </div>
     </header>
   );

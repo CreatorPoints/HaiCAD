@@ -2,8 +2,11 @@ import React, { useEffect, useRef, useState, useImperativeHandle, forwardRef } f
 import * as THREE from 'three';
 // @ts-ignore
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
+// @ts-ignore
+import { TransformControls } from 'three/examples/jsm/controls/TransformControls.js';
 import { WorkerMeshOutput } from '../cad/cadClient';
-import { Box, Eye, Layers, Maximize2, RotateCcw } from 'lucide-react';
+import { RotateCcw, Crosshair } from 'lucide-react';
+import { CadToolMode, Transform3D, FaceNodePoint } from '../cad/cadModelingState';
 
 export type RenderMode = 'lit' | 'unlit' | 'wireframe';
 
@@ -23,6 +26,10 @@ interface CADViewportProps {
   onToggleAxes?: () => void;
   showEdges?: boolean;
   onToggleEdges?: () => void;
+  toolMode?: CadToolMode;
+  onUpdateTransform?: (transform: Partial<Transform3D>) => void;
+  onAddFaceNode?: (node: FaceNodePoint) => void;
+  snapGridSize?: number;
 }
 
 export const CADViewport = forwardRef<CADViewportHandle, CADViewportProps>(
@@ -38,6 +45,10 @@ export const CADViewport = forwardRef<CADViewportHandle, CADViewportProps>(
       onToggleAxes,
       showEdges: controlledShowEdges,
       onToggleEdges,
+      toolMode = 'select',
+      onUpdateTransform,
+      onAddFaceNode,
+      snapGridSize = 1,
     },
     ref
   ) => {
@@ -46,11 +57,12 @@ export const CADViewport = forwardRef<CADViewportHandle, CADViewportProps>(
     const cameraRef = useRef<THREE.PerspectiveCamera | null>(null);
     const rendererRef = useRef<THREE.WebGLRenderer | null>(null);
     const controlsRef = useRef<any>(null);
+    const transformControlsRef = useRef<any>(null);
     const meshGroupRef = useRef<THREE.Group>(new THREE.Group());
+    const nodesGroupRef = useRef<THREE.Group>(new THREE.Group());
     const gridRef = useRef<THREE.GridHelper | null>(null);
     const axesRef = useRef<THREE.AxesHelper | null>(null);
 
-    // Fallback internal states if not controlled (Default: 'lit')
     const [internalRenderMode, setInternalRenderMode] = useState<RenderMode>('lit');
     const [internalShowGrid, setInternalShowGrid] = useState<boolean>(true);
     const [internalShowAxes, setInternalShowAxes] = useState<boolean>(true);
@@ -61,10 +73,9 @@ export const CADViewport = forwardRef<CADViewportHandle, CADViewportProps>(
     const activeShowAxes = controlledShowAxes !== undefined ? controlledShowAxes : internalShowAxes;
     const activeShowEdges = controlledShowEdges !== undefined ? controlledShowEdges : internalShowEdges;
 
-    // Viewport Quick HUD
     const [viewOrientation, setViewOrientation] = useState<string>('ISO');
+    const [hoveredFacePoint, setHoveredFacePoint] = useState<[number, number, number] | null>(null);
 
-    // Imperative Handles for external triggers (e.g. from Left Tools Panel)
     useImperativeHandle(ref, () => ({
       setCameraView: (view: 'iso' | 'top' | 'front' | 'right') => {
         handleCameraPreset(view);
@@ -93,7 +104,7 @@ export const CADViewport = forwardRef<CADViewportHandle, CADViewportProps>(
       camera.up.set(0, 0, 1);
       cameraRef.current = camera;
 
-      // 3. High-Quality WebGL Renderer
+      // 3. WebGL Renderer
       const renderer = new THREE.WebGLRenderer({
         antialias: true,
         alpha: true,
@@ -101,50 +112,46 @@ export const CADViewport = forwardRef<CADViewportHandle, CADViewportProps>(
       });
       renderer.setSize(width, height, true);
       renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-      renderer.shadowMap.enabled = true;
-      renderer.shadowMap.type = THREE.PCFSoftShadowMap;
       renderer.toneMapping = THREE.ACESFilmicToneMapping;
-      renderer.toneMappingExposure = 1.2;
+      renderer.toneMappingExposure = 1.1;
       renderer.domElement.style.width = '100%';
       renderer.domElement.style.height = '100%';
       renderer.domElement.style.display = 'block';
-      rendererRef.current = renderer;
       currentMount.appendChild(renderer.domElement);
+      rendererRef.current = renderer;
 
-      // 4. Studio Lighting Rig
+      // 4. Studio CAD Lights
       const ambientLight = new THREE.AmbientLight(0xffffff, 0.9);
       scene.add(ambientLight);
 
-      const keyLight = new THREE.DirectionalLight(0xffffff, 1.4);
-      keyLight.position.set(150, -100, 200);
-      keyLight.castShadow = true;
-      keyLight.shadow.mapSize.width = 2048;
-      keyLight.shadow.mapSize.height = 2048;
-      scene.add(keyLight);
+      const mainLight = new THREE.DirectionalLight(0xffffff, 1.2);
+      mainLight.position.set(150, -100, 200);
+      scene.add(mainLight);
 
-      const fillLight = new THREE.DirectionalLight(0x38bdf8, 0.6);
-      fillLight.position.set(-150, 150, 100);
+      const fillLight = new THREE.DirectionalLight(0x90b0ff, 0.7);
+      fillLight.position.set(-120, 150, 80);
       scene.add(fillLight);
 
-      const rimLight = new THREE.DirectionalLight(0x818cf8, 0.5);
-      rimLight.position.set(0, 150, -100);
-      scene.add(rimLight);
+      const bottomRimLight = new THREE.DirectionalLight(0x38bdf8, 0.4);
+      bottomRimLight.position.set(0, 0, -100);
+      scene.add(bottomRimLight);
 
-      // 5. CAD Precision Grid
-      const grid = new THREE.GridHelper(400, 80, 0x00f0ff, 0x1e293b);
-      grid.rotation.x = Math.PI / 2; // Orient to XY plane
-      grid.position.z = -0.01; // Avoid z-fighting
+      // 5. Engineering Workplane Grid (XY Plane)
+      const grid = new THREE.GridHelper(300, 30, 0x00f0ff, 0x1e293b);
+      grid.rotation.x = Math.PI / 2;
+      grid.position.set(0, 0, 0);
       scene.add(grid);
       gridRef.current = grid;
 
       // 6. XYZ Coordinate Triad
-      const axes = new THREE.AxesHelper(30);
+      const axes = new THREE.AxesHelper(35);
       axes.position.set(0, 0, 0);
       scene.add(axes);
       axesRef.current = axes;
 
-      // 7. Add Geometry Mesh Group
+      // 7. Add Geometry & Nodes Groups
       scene.add(meshGroupRef.current);
+      scene.add(nodesGroupRef.current);
 
       // 8. OrbitControls Setup (Hardstop engineering camera, zero glide damping)
       const controls = new OrbitControls(camera, renderer.domElement);
@@ -154,7 +161,62 @@ export const CADViewport = forwardRef<CADViewportHandle, CADViewportProps>(
       controls.minDistance = 2;
       controlsRef.current = controls;
 
-      // 9. Render Loop
+      // 9. TransformControls Setup (3D Gizmo for Move / Rotate / Scale)
+      const transformControls = new TransformControls(camera, renderer.domElement);
+      transformControls.size = 0.75;
+      transformControls.addEventListener('dragging-changed', (event: any) => {
+        controls.enabled = !event.value;
+      });
+
+      transformControls.addEventListener('change', () => {
+        if (transformControls.object && onUpdateTransform) {
+          const pos = transformControls.object.position;
+          const rot = transformControls.object.rotation;
+          const scl = transformControls.object.scale;
+
+          let posX = Math.round(pos.x * 10) / 10;
+          let posY = Math.round(pos.y * 10) / 10;
+          let posZ = Math.round(pos.z * 10) / 10;
+
+          if (snapGridSize > 0) {
+            posX = Math.round(posX / snapGridSize) * snapGridSize;
+            posY = Math.round(posY / snapGridSize) * snapGridSize;
+            posZ = Math.round(posZ / snapGridSize) * snapGridSize;
+          }
+
+          onUpdateTransform({
+            x: posX,
+            y: posY,
+            z: posZ,
+            rotX: Math.round(rot.x * (180 / Math.PI)),
+            rotY: Math.round(rot.y * (180 / Math.PI)),
+            rotZ: Math.round(rot.z * (180 / Math.PI)),
+            scaleX: Math.round(scl.x * 100) / 100,
+            scaleY: Math.round(scl.y * 100) / 100,
+            scaleZ: Math.round(scl.z * 100) / 100,
+          });
+        }
+      });
+
+      scene.add(transformControls as any);
+      transformControlsRef.current = transformControls;
+
+      // 10. Resize Observer
+      const handleResize = () => {
+        if (!currentMount || !renderer || !camera) return;
+        const w = currentMount.clientWidth;
+        const h = currentMount.clientHeight;
+        if (w === 0 || h === 0) return;
+        camera.aspect = w / h;
+        camera.updateProjectionMatrix();
+        renderer.setSize(w, h, true);
+      };
+
+      const resizeObserver = new ResizeObserver(() => handleResize());
+      resizeObserver.observe(currentMount);
+      window.addEventListener('resize', handleResize);
+
+      // 11. Render Loop
       let animationFrameId: number;
       const animate = () => {
         animationFrameId = requestAnimationFrame(animate);
@@ -163,29 +225,12 @@ export const CADViewport = forwardRef<CADViewportHandle, CADViewportProps>(
       };
       animate();
 
-      // 10. Robust Container ResizeObserver & Window Resize
-      const handleResize = () => {
-        if (!currentMount) return;
-        const w = currentMount.clientWidth;
-        const h = currentMount.clientHeight;
-        if (w > 0 && h > 0) {
-          camera.aspect = w / h;
-          camera.updateProjectionMatrix();
-          renderer.setSize(w, h, true);
-        }
-      };
-
-      const resizeObserver = new ResizeObserver(() => {
-        handleResize();
-      });
-      resizeObserver.observe(currentMount);
-      window.addEventListener('resize', handleResize);
-
-      // Cleanup
       return () => {
-        cancelAnimationFrame(animationFrameId);
-        resizeObserver.disconnect();
         window.removeEventListener('resize', handleResize);
+        resizeObserver.disconnect();
+        cancelAnimationFrame(animationFrameId);
+        controls.dispose();
+        transformControls.dispose();
         if (currentMount && renderer.domElement) {
           currentMount.removeChild(renderer.domElement);
         }
@@ -193,13 +238,33 @@ export const CADViewport = forwardRef<CADViewportHandle, CADViewportProps>(
       };
     }, []);
 
-    // Toggle Grid and Axes
+    // Update Gizmo mode (Move / Rotate / Scale / Off)
     useEffect(() => {
-      if (gridRef.current) gridRef.current.visible = activeShowGrid;
-      if (axesRef.current) axesRef.current.visible = activeShowAxes;
-    }, [activeShowGrid, activeShowAxes]);
+      const tc = transformControlsRef.current;
+      const group = meshGroupRef.current;
+      if (!tc) return;
 
-    // Material Generator based on Render Mode (Clean CAD Shaders: Lit, Unlit, Wireframe)
+      if (toolMode === 'move') {
+        tc.setMode('translate');
+        if (group && group.children.length > 0) {
+          tc.attach(group);
+        }
+      } else if (toolMode === 'rotate') {
+        tc.setMode('rotate');
+        if (group && group.children.length > 0) {
+          tc.attach(group);
+        }
+      } else if (toolMode === 'scale') {
+        tc.setMode('scale');
+        if (group && group.children.length > 0) {
+          tc.attach(group);
+        }
+      } else {
+        tc.detach();
+      }
+    }, [toolMode, meshes]);
+
+    // Material Generator based on Render Mode (Lit, Unlit, Wireframe)
     const getMaterialForMode = (mode: RenderMode, originalColor = '#3b82f6') => {
       switch (mode) {
         case 'unlit':
@@ -227,140 +292,177 @@ export const CADViewport = forwardRef<CADViewportHandle, CADViewportProps>(
       const group = meshGroupRef.current;
       if (!group) return;
 
-      // Clear existing geometry & prevent WebGL memory leaks
+      // Dispose existing
       while (group.children.length > 0) {
-        const child = group.children[0] as THREE.Mesh;
-        if (child.geometry) child.geometry.dispose();
-        if (child.material) {
-          if (Array.isArray(child.material)) child.material.forEach((m) => m.dispose());
-          else child.material.dispose();
+        const obj = group.children[0] as THREE.Mesh;
+        if (obj.geometry) obj.geometry.dispose();
+        if (Array.isArray(obj.material)) {
+          obj.material.forEach((m) => m.dispose());
+        } else if (obj.material) {
+          obj.material.dispose();
         }
-        if (child.children) {
-          child.children.forEach((c: any) => {
-            if (c.geometry) c.geometry.dispose();
-            if (c.material) {
-              if (Array.isArray(c.material)) c.material.forEach((m: any) => m.dispose());
-              else c.material.dispose();
-            }
-          });
-        }
-        group.remove(child);
+        group.remove(obj);
       }
 
       if (!meshes || meshes.length === 0) return;
 
-      // Convert worker buffer to Three.js BufferGeometry
-      meshes.forEach((meshData) => {
-        const { mesh, edges, color, name } = meshData;
-        if (!mesh || !mesh.vertices || mesh.vertices.length === 0) return;
+      meshes.forEach((meshOut) => {
+        const { mesh: meshData, edges: edgeData, color } = meshOut;
+        if (!meshData.vertices || meshData.vertices.length === 0) return;
 
         const geometry = new THREE.BufferGeometry();
         geometry.setAttribute(
           'position',
-          new THREE.Float32BufferAttribute(mesh.vertices, 3)
+          new THREE.Float32BufferAttribute(meshData.vertices, 3)
         );
-        if (mesh.normals && mesh.normals.length > 0) {
+
+        if (meshData.normals && meshData.normals.length > 0) {
+          geometry.setAttribute(
+            'position',
+            new THREE.Float32BufferAttribute(meshData.vertices, 3)
+          );
           geometry.setAttribute(
             'normal',
-            new THREE.Float32BufferAttribute(mesh.normals, 3)
+            new THREE.Float32BufferAttribute(meshData.normals, 3)
           );
         } else {
           geometry.computeVertexNormals();
         }
-        if (mesh.triangles && mesh.triangles.length > 0) {
-          geometry.setIndex(mesh.triangles);
+
+        if (meshData.triangles && meshData.triangles.length > 0) {
+          geometry.setIndex(meshData.triangles);
         }
 
         const material = getMaterialForMode(activeRenderMode, color);
         const threeMesh = new THREE.Mesh(geometry, material);
-        threeMesh.castShadow = true;
-        threeMesh.receiveShadow = true;
-        threeMesh.name = name || 'CAD_Part';
-        group.add(threeMesh);
+        threeMesh.name = meshOut.name || 'CADPart';
 
-        // Edge Overlays (OpenCASCADE extracted Feature Lines)
-        if (activeShowEdges && edges && edges.lines && edges.lines.length > 0) {
+        // Add Feature Edge Lines
+        if (activeShowEdges && edgeData && edgeData.lines && edgeData.lines.length > 0) {
           const edgeGeom = new THREE.BufferGeometry();
           edgeGeom.setAttribute(
             'position',
-            new THREE.Float32BufferAttribute(edges.lines, 3)
+            new THREE.Float32BufferAttribute(edgeData.lines, 3)
           );
           const edgeMat = new THREE.LineBasicMaterial({
-            color: activeRenderMode === 'wireframe' ? 0x00f0ff : 0x0f172a,
-            linewidth: 1,
+            color: 0x00f0ff,
+            linewidth: 1.5,
             transparent: true,
-            opacity: 0.75,
+            opacity: 0.85,
           });
-          const line = new THREE.LineSegments(edgeGeom, edgeMat);
-          threeMesh.add(line);
+          const lineSegments = new THREE.LineSegments(edgeGeom, edgeMat);
+          threeMesh.add(lineSegments);
         }
+
+        group.add(threeMesh);
       });
 
-      // Fit Camera to Bounding Box
+      // Recalculate camera framing on initial load
       if (group.children.length > 0 && cameraRef.current && controlsRef.current) {
         const box = new THREE.Box3().setFromObject(group);
         const center = box.getCenter(new THREE.Vector3());
-        const size = box.getSize(new THREE.Vector3());
-        const maxDim = Math.max(size.x, size.y, size.z, 20);
-
         controlsRef.current.target.copy(center);
-        cameraRef.current.position.set(
-          center.x + maxDim * 1.5,
-          center.y - maxDim * 1.5,
-          center.z + maxDim * 1.2
-        );
-        cameraRef.current.lookAt(center);
-        controlsRef.current.update();
       }
     }, [meshes, activeRenderMode, activeShowEdges]);
 
-    // Preset Camera Orientations
+    // Handle Mouse Raycasting for Face Selection & Per-Face Node Placement
+    const handlePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+      if (toolMode !== 'face_node') return;
+      const mount = mountRef.current;
+      const camera = cameraRef.current;
+      const scene = sceneRef.current;
+      if (!mount || !camera || !scene) return;
+
+      const rect = mount.getBoundingClientRect();
+      const mouse = new THREE.Vector2(
+        ((e.clientX - rect.left) / rect.width) * 2 - 1,
+        -((e.clientY - rect.top) / rect.height) * 2 + 1
+      );
+
+      const raycaster = new THREE.Raycaster();
+      raycaster.setFromCamera(mouse, camera);
+
+      const intersects = raycaster.intersectObjects(meshGroupRef.current.children, true);
+      if (intersects.length > 0) {
+        const hit = intersects[0];
+        const pt = hit.point;
+        const normal = hit.face ? [hit.face.normal.x, hit.face.normal.y, hit.face.normal.z] : [0, 0, 1];
+
+        // Create visual node sphere marker
+        const nodeSphere = new THREE.Mesh(
+          new THREE.SphereGeometry(1.5, 16, 16),
+          new THREE.MeshBasicMaterial({ color: 0xa855f7 })
+        );
+        nodeSphere.position.copy(pt);
+        nodesGroupRef.current.add(nodeSphere);
+
+        if (onAddFaceNode) {
+          onAddFaceNode({
+            id: 'node_' + Date.now(),
+            x: Math.round(pt.x * 10) / 10,
+            y: Math.round(pt.y * 10) / 10,
+            z: Math.round(pt.z * 10) / 10,
+            faceNormal: normal as [number, number, number],
+          });
+        }
+      }
+    };
+
+    // Camera Preset Helper
     const handleCameraPreset = (preset: 'iso' | 'top' | 'front' | 'right') => {
       const camera = cameraRef.current;
       const controls = controlsRef.current;
-      const group = meshGroupRef.current;
       if (!camera || !controls) return;
 
-      const box = new THREE.Box3().setFromObject(group);
-      const center = box.isEmpty() ? new THREE.Vector3(0, 0, 10) : box.getCenter(new THREE.Vector3());
-      const size = box.isEmpty() ? new THREE.Vector3(40, 40, 40) : box.getSize(new THREE.Vector3());
-      const maxDim = Math.max(size.x, size.y, size.z, 40);
-
-      controls.target.copy(center);
+      const target = controls.target.clone();
+      const dist = 140;
 
       switch (preset) {
-        case 'iso':
-          camera.position.set(center.x + maxDim * 1.6, center.y - maxDim * 1.6, center.z + maxDim * 1.3);
-          setViewOrientation('ISO');
-          break;
         case 'top':
-          camera.position.set(center.x, center.y, center.z + maxDim * 2.5);
-          setViewOrientation('TOP');
+          camera.position.set(target.x, target.y, target.z + dist);
+          camera.up.set(0, 1, 0);
+          setViewOrientation('TOP (XY)');
           break;
         case 'front':
-          camera.position.set(center.x, center.y - maxDim * 2.5, center.z);
-          setViewOrientation('FRONT');
+          camera.position.set(target.x, target.y - dist, target.z);
+          camera.up.set(0, 0, 1);
+          setViewOrientation('FRONT (XZ)');
           break;
         case 'right':
-          camera.position.set(center.x + maxDim * 2.5, center.y, center.z);
-          setViewOrientation('RIGHT');
+          camera.position.set(target.x + dist, target.y, target.z);
+          camera.up.set(0, 0, 1);
+          setViewOrientation('RIGHT (YZ)');
+          break;
+        case 'iso':
+        default:
+          camera.position.set(target.x + 100, target.y - 100, target.z + 90);
+          camera.up.set(0, 0, 1);
+          setViewOrientation('ISO (3D)');
           break;
       }
-      camera.lookAt(center);
+      camera.lookAt(target);
       controls.update();
     };
 
     return (
-      <div className="relative w-full h-full bg-[#0b0e14] overflow-hidden select-none">
+      <div
+        className="relative w-full h-full bg-[#0b0e14] overflow-hidden select-none"
+        onPointerDown={handlePointerDown}
+      >
         {/* Three.js Canvas Mount */}
-        <div ref={mountRef} className="w-full h-full absolute inset-0 cursor-grab active:cursor-grabbing" />
+        <div
+          ref={mountRef}
+          className={`w-full h-full absolute inset-0 ${
+            toolMode === 'face_node' ? 'cursor-crosshair' : 'cursor-grab active:cursor-grabbing'
+          }`}
+        />
 
-        {/* Viewport Floating Top Controls Bar */}
-        <div className="absolute top-4 right-4 flex items-center gap-1.5 p-1 bg-surface/80 border border-surface-border rounded-2xl shadow-xl backdrop-blur-md z-10">
+        {/* Viewport Floating Top Camera Presets */}
+        <div className="absolute top-3 right-3 flex items-center gap-1 p-1 bg-surface/85 border border-surface-border rounded-xl shadow-xl backdrop-blur-md z-10">
           <button
             type="button"
             onClick={() => handleCameraPreset('iso')}
-            className="px-2.5 py-1 text-xs font-mono rounded-xl hover:bg-surface-subtle text-slate-300 hover:text-white transition-all cursor-pointer"
+            className="px-2 py-0.5 text-xs font-mono rounded-lg hover:bg-surface-subtle text-slate-300 hover:text-white transition-all"
             title="Isometric 3D View"
           >
             ISO
@@ -368,7 +470,7 @@ export const CADViewport = forwardRef<CADViewportHandle, CADViewportProps>(
           <button
             type="button"
             onClick={() => handleCameraPreset('top')}
-            className="px-2.5 py-1 text-xs font-mono rounded-xl hover:bg-surface-subtle text-slate-300 hover:text-white transition-all cursor-pointer"
+            className="px-2 py-0.5 text-xs font-mono rounded-lg hover:bg-surface-subtle text-slate-300 hover:text-white transition-all"
             title="Top (XY) View"
           >
             TOP
@@ -376,7 +478,7 @@ export const CADViewport = forwardRef<CADViewportHandle, CADViewportProps>(
           <button
             type="button"
             onClick={() => handleCameraPreset('front')}
-            className="px-2.5 py-1 text-xs font-mono rounded-xl hover:bg-surface-subtle text-slate-300 hover:text-white transition-all cursor-pointer"
+            className="px-2 py-0.5 text-xs font-mono rounded-lg hover:bg-surface-subtle text-slate-300 hover:text-white transition-all"
             title="Front (XZ) View"
           >
             FRONT
@@ -384,33 +486,33 @@ export const CADViewport = forwardRef<CADViewportHandle, CADViewportProps>(
           <button
             type="button"
             onClick={() => handleCameraPreset('right')}
-            className="px-2.5 py-1 text-xs font-mono rounded-xl hover:bg-surface-subtle text-slate-300 hover:text-white transition-all cursor-pointer"
+            className="px-2 py-0.5 text-xs font-mono rounded-lg hover:bg-surface-subtle text-slate-300 hover:text-white transition-all"
             title="Right (YZ) View"
           >
             RIGHT
           </button>
 
-          <div className="w-px h-4 bg-surface-border mx-0.5" />
+          <div className="w-px h-3 bg-surface-border mx-0.5" />
 
           <button
             type="button"
             onClick={() => handleCameraPreset('iso')}
-            className="p-1.5 rounded-xl hover:bg-surface-subtle text-slate-400 hover:text-white transition-all cursor-pointer"
-            title="Reset Camera Target"
+            className="p-1 rounded-lg hover:bg-surface-subtle text-slate-400 hover:text-white transition-all"
+            title="Reset Camera"
           >
-            <RotateCcw className="w-3.5 h-3.5" />
+            <RotateCcw className="w-3 h-3" />
           </button>
         </div>
 
         {/* Viewport Bottom Status Bar */}
-        <div className="absolute bottom-4 left-4 flex items-center gap-3 px-3 py-1.5 bg-surface/80 border border-surface-border rounded-xl backdrop-blur-md z-10 text-[11px] font-mono text-slate-400">
+        <div className="absolute bottom-3 left-3 flex items-center gap-2.5 px-3 py-1 bg-surface/85 border border-surface-border rounded-lg backdrop-blur-md z-10 text-[11px] font-mono text-slate-400">
           <div className="flex items-center gap-1.5">
             <span className="w-2 h-2 rounded-full bg-emerald" />
-            <span className="text-slate-200">OpenCASCADE Engine</span>
+            <span className="text-slate-200">CAD Kernel</span>
           </div>
           <span className="text-surface-border">•</span>
           <div>
-            Meshes: <span className="text-cyan font-bold">{meshes.length}</span>
+            Tool: <strong className="text-cyan uppercase">{toolMode}</strong>
           </div>
           <span className="text-surface-border">•</span>
           <div>
@@ -418,12 +520,20 @@ export const CADViewport = forwardRef<CADViewportHandle, CADViewportProps>(
           </div>
         </div>
 
-        {/* Building / Compiling HUD Indicator */}
+        {/* Per-Face Node Mode HUD Notice */}
+        {toolMode === 'face_node' && (
+          <div className="absolute top-4 left-1/2 -translate-x-1/2 flex items-center gap-2 px-3 py-1.5 bg-purple-950/90 border border-purple-500/50 rounded-full shadow-lg text-purple-200 text-xs font-mono backdrop-blur-md z-20 animate-bounce">
+            <Crosshair className="w-3.5 h-3.5 text-purple-400" />
+            <span>Click on any 3D face to add a node & create cuts</span>
+          </div>
+        )}
+
+        {/* Compiling HUD Indicator */}
         {isBuilding && (
-          <div className="absolute top-6 left-1/2 -translate-x-1/2 flex items-center gap-2.5 px-4 py-2 bg-surface/90 border border-cyan/40 rounded-full shadow-lg backdrop-blur-md animate-pulse z-20">
-            <div className="w-2.5 h-2.5 rounded-full bg-cyan animate-ping" />
-            <span className="text-xs font-mono font-medium text-cyan-glow">
-              Compiling OpenCASCADE geometry...
+          <div className="absolute top-5 left-1/2 -translate-x-1/2 flex items-center gap-2 px-3.5 py-1.5 bg-surface/90 border border-cyan/40 rounded-full shadow-lg backdrop-blur-md animate-pulse z-20">
+            <div className="w-2 h-2 rounded-full bg-cyan animate-ping" />
+            <span className="text-xs font-mono font-medium text-cyan">
+              Compiling CAD geometry...
             </span>
           </div>
         )}

@@ -1,5 +1,6 @@
 /**
- * Prompt engineering templates for the HaiCAD Agentic Design Loop
+ * Complete Exhaustive OpenCASCADE & Replicad CAD Kernel Prompt Specification
+ * Contains 100% comprehensive documentation of all 2D sketches, 3D solids, boolean CSG, filters, and transforms.
  */
 
 import { CadPhase, DesignParameters } from '../types/aiCadTypes';
@@ -7,18 +8,79 @@ import { CadPhase, DesignParameters } from '../types/aiCadTypes';
 export const REPLICAD_SYSTEM_CONTEXT = `
 You are the HaiCAD Expert CAD Kernel AI, generating precision 3D parametric solids using Replicad (OpenCASCADE in WebAssembly).
 
-Strict Replicad Coding Directives:
-1. Pure JavaScript: Write pure, clean JavaScript/TypeScript.
-2. Injected Environment: The environment supplies \`cadEnv\` with helpers:
-   - \`draw()\`, \`drawCircle(r)\`, \`drawRectangle(w, h)\`, \`drawRoundedRectangle(w, h, r)\`
-   - \`makeBox(x, y, z)\` or \`makeBox([x1, y1, z1], [x2, y2, z2])\`
-   - \`makeCylinder(radius, height, location, direction)\`
-   - \`makeSphere(radius)\`
-3. Directional Fillets: Always use directional edge filters to prevent topological kernel collapse:
-   - Example: \`shape.fillet(r, (e) => e.inDirection("Z"))\` or \`shape.fillet(r, (e) => e.inPlane("XY"))\`
-4. Boolean Cuts: Always oversize cutter shapes slightly along the cutting axis (e.g. height + 4, translate -2 on Z) so holes pierce through cleanly without coincident boundary artifacts.
-5. Function Modularity: You are generating a single step function or a complete \`function main({ makeBox, draw, makeCylinder, drawRoundedRectangle }) { ... return shape; }\` script.
-6. NO MARKDOWN PROSE OUTSIDE CODE: When asked for code, output ONLY the JavaScript function inside \`\`\`javascript ... \`\`\` code block.
+================================================================================
+COMPLETE EXHAUSTIVE OPENCASCADE & REPLICAD CAD KERNEL API SPECIFICATION
+================================================================================
+
+1. SCRIPT EXECUTION CONTRACT:
+   - Your code MUST define a top-level function:
+     \`function main({ makeBox, makeCylinder, makeSphere, draw, drawCircle, drawRectangle, drawRoundedRectangle }) { ... return shape; }\`
+   - The function must return a valid 3D CAD Shape object or an array of shapes.
+   - All units are millimeters (mm). Coordinates follow standard Z-up right-hand rule.
+
+2. 2D SKETCHING & BLUEPRINTS:
+   - \`draw(startPoint?: [x, y])\`:
+     - \`.lineTo([x, y])\` / \`.line(dx, dy)\`
+     - \`.hLine(distance)\` / \`.vLine(distance)\` (relative delta movement)
+     - \`.hLineTo(x)\` / \`.vLineTo(y)\` (absolute coordinate movement)
+     - \`.tangentArc([x, y])\` / \`.tangentArc(dx, dy)\`
+     - \`.threePointsArc([midX, midY], [endX, endY])\`
+     - \`.bulgeArc([x, y], bulge)\`
+     - \`.bezierCurveTo([cp1x, cp1y], [cp2x, cp2y], [x, y])\`
+     - \`.close()\` (MANDATORY before sketchOnPlane/extruding!)
+     - \`.polygon(radius, sides)\` (Regular N-gon: 3=triangle, 6=hex nut, 8=octagon)
+   - Pre-built 2D Sketches:
+     - \`drawCircle(radius, center?: [x, y])\`
+     - \`drawRectangle(width, length, center?: [x, y])\`
+     - \`drawRoundedRectangle(width, length, radius, center?: [x, y])\`
+     - \`drawEllipse(rX, rY, center?: [x, y])\`
+     - \`drawSlot(length, radius, center?: [x, y])\`
+   - Sketch Plane Attachment:
+     - \`.sketchOnPlane("XY" | "XZ" | "YZ", origin?: [x, y, z])\`
+
+3. 3D EXTRUSION & LOFTING:
+   - \`sketch.extrude(distance, options?: { twistAngle?: number })\`
+   - \`sketch.revolve(axis?: [x, y, z], origin?: [x, y, z], angle?: number)\` (Default 360 deg)
+   - \`sketch.loftWith([sketch2, sketch3], options?: { ruled?: boolean })\`
+   - \`sketch.sweepOn(spineCurve)\`
+
+4. 3D PRIMITIVES (CSG):
+   - \`makeBox(width, length, height)\` (Creates centered box) or \`makeBox([x1, y1, z1], [x2, y2, z2])\`
+   - \`makeBaseBox(width, length, height)\`
+   - \`makeCylinder(radius, height, location?: [x, y, z], direction?: [x, y, z])\`
+   - \`makeSphere(radius, center?: [x, y, z])\`
+   - \`makeTorus(majorRadius, minorRadius, center?: [x, y, z])\`
+   - \`makeCone(radius1, radius2, height, location?: [x, y, z])\`
+   - \`makeHelix(pitch, height, radius)\`
+   - \`makeCompound(shapes: Shape[])\`
+
+5. BOOLEAN CSG OPERATIONS:
+   - \`shapeA.fuse(shapeB)\` (Aliases: \`.union(shapeB)\`) -> Welds two solids into one
+   - \`shapeA.cut(shapeB)\` (Aliases: \`.subtract(shapeB)\`, \`.difference(shapeB)\`) -> Subtracts shapeB from shapeA
+   - \`shapeA.intersect(shapeB)\` (Aliases: \`.intersection(shapeB)\`) -> Common volume
+
+6. EDGE FILLETING & DRESS-UP (CRITICAL KERNEL RULES):
+   - \`shape.fillet(radius, filter?: (edge: Edge) => boolean)\`
+   - NEVER fillet all edges blindly (e.g. avoid \`shape.fillet(r)\` without a filter)! Blind filleting collapses OpenCASCADE topology.
+   - ALWAYS use specific edge filters:
+     - Vertical corner edges: \`shape.fillet(r, (e) => e.inDirection("Z"))\`
+     - Horizontal plane edges: \`shape.fillet(r, (e) => e.inPlane("XY"))\`
+     - Specific height edges: \`shape.fillet(r, (e) => e.inPlane("XY", zHeight))\`
+     - Linear edges only: \`shape.fillet(r, (e) => e.isLinear)\`
+   - \`shape.chamfer(distance, filter?: (edge: Edge) => boolean)\` (45-degree flat bevels)
+   - \`shape.shell(thickness, filterFaces?: (face: Face) => boolean)\` (Hollow enclosure)
+
+7. TRANSFORMATIONS (ALL RETURN NEW SHAPES):
+   - \`shape.translate([dx, dy, dz])\`
+   - \`shape.rotate(degrees, originPoint?: [x, y, z], axisVector?: [x, y, z])\`
+   - \`shape.scale(factor, originPoint?: [x, y, z])\`
+   - \`shape.mirror(planeNormal: [x, y, z], originPoint?: [x, y, z])\`
+   - \`shape.clone()\`
+
+8. TOPOLOGICAL PITFALL PREVENTION:
+   - Variable Shadowing: Never redefine loop variables (e.g. \`for (const hole of holes) { const cutter = makeCylinder(...); }\`).
+   - Clean Boolean Piercing: When cutting holes or pockets through a plate of thickness T, create the cylinder cutter with height T + 4 and translate -2 on Z so it cleanly pierces through both top and bottom boundaries.
+   - Translate Chain: \`shape.translate([x, y, z])\` returns a NEW shape; always assign it: \`let pcb = pcb.cut(cutter.translate([x, y, z]));\`.
 `;
 
 export function buildPlanningPrompt(currentEditorCode?: string): string {
@@ -39,17 +101,18 @@ ${codeContext}
 EVALUATION & BEHAVIOR RULES:
 
 1. EXISTING CODE / MODIFICATION REQUESTS:
-   - If the user asks to modify, update, remove, add, or transform features of the current model (e.g., "remove holes", "make it 20mm taller", "add 4 fillets", "change screw diameter to 3mm", "make the base thicker", "chamfer edges"):
-     - Inspect the [CURRENT ACTIVE CAD SCRIPT IN WORKSPACE IDE] above.
-     - You ALREADY have full context of what the object is, what its dimensions are, and what cuts/holes it contains from the code.
-     - Provide a brief summary of what you are changing, and output the FULL complete updated Replicad script inside a \`\`\`javascript block with \`function main({ makeBox, draw, makeCylinder, drawRoundedRectangle }) { ... return shape; }\`.
+   - When the user asks to build, modify, add/remove holes, change dimensions, or apply features:
+     - Inspect the active code above.
+     - Provide a brief summary of the design.
+     - Output the COMPLETE, executable Replicad script inside a \`\`\`javascript block with \`function main({ makeBox, draw, makeCylinder, drawRoundedRectangle }) { ... return shape; }\`.
+     - Always use \`.cut()\` for subtractive cuts, \`.inDirection("Z")\` / \`.inPlane("XY")\` for fillets, and oversize cutters by +4mm along Z.
      - Include the JSON metadata block at the bottom with \`isReadyToGenerate: true\`.
 
 2. ATTACHED VECTOR DRAWINGS (SVG) & BLUEPRINTS:
    - When an SVG vector drawing is attached, parse the viewBox, coordinates, dimensions, <rect>, <circle>, <polygon>, and <path> tags from the XML to reconstruct the precise 2D sketch and extrude into 3D CAD solids.
 
 3. QUESTIONS / INSPECTIONS ONLY:
-   - If the user is just asking a question (e.g., "what is this?", "explain the code", "what dimensions do we have?"), answer conversationally without generating default replacement shapes.
+   - If the user is just asking a question (e.g., "what is this?", "explain the code", "what dimensions do we have?"), answer conversationally without generating replacement shapes.
 
 4. PARAMETER EXTRACTION:
    - Always output a structured JSON block at the bottom:
@@ -101,19 +164,7 @@ ${userFeedback ? `User Adjustment Notes: "${userFeedback}"\n` : ''}
 Task: Generate the Step 1 Base Geometry function: \`function buildBase(cadEnv, params)\`
 Requirements:
 - Create the primary outer boundary solid matching the user's intent and parameters.
-- Use dimensions from \`params\` (with sensible fallbacks).
 - Output ONLY the \`buildBase\` function inside \`\`\`javascript ... \`\`\` block.
-
-Example:
-\`\`\`javascript
-function buildBase(cadEnv, params) {
-  const { makeBox, drawRoundedRectangle } = cadEnv;
-  const w = params?.dimensions?.width || 80;
-  const l = params?.dimensions?.length || 60;
-  const h = params?.dimensions?.height || 15;
-  return makeBox(w, l, h);
-}
-\`\`\`
 `;
 
     case 'cutouts':
@@ -154,7 +205,6 @@ ${userFeedback ? `User Adjustment Notes: "${userFeedback}"\n` : ''}
 Task: Generate the Step 3 Feature Enhancement function: \`function addFeatures(cadEnv, currentShape, params)\`
 Requirements:
 - Add structural ribs, bosses, snaps, or directional fillets (\`shape.fillet(r, (e) => e.inDirection("Z"))\`).
-- Return the updated solid.
 - Output ONLY the \`addFeatures\` function inside \`\`\`javascript ... \`\`\` block.
 `;
 
@@ -169,7 +219,6 @@ ${userFeedback ? `User Adjustment Notes: "${userFeedback}"\n` : ''}
 Task: Generate the Step 4 Polish & Finalize function: \`function finalizeModel(cadEnv, currentShape, params)\`
 Requirements:
 - Apply final chamfers, edge deburring, clearance adjustments, or coordinate alignment.
-- Return the production-ready solid.
 - Output ONLY the \`finalizeModel\` function inside \`\`\`javascript ... \`\`\` block.
 `;
 
@@ -206,6 +255,7 @@ ${params.originalPrompt}
 Correction Instructions:
 1. Fix the error (e.g. undefined helper, bad boolean cutter dimensions, zero-thickness artifacts, or invalid fillet edge filter).
 2. If a fillet failed, reduce the radius or use directional filters like \`(e) => e.inDirection("Z")\`.
-3. Return ONLY the corrected function inside \`\`\`javascript ... \`\`\` with NO markdown commentary outside the block.
+3. In Replicad, subtraction is \`.cut(cutterShape)\`.
+4. Return ONLY the corrected function inside \`\`\`javascript ... \`\`\` with NO markdown commentary outside the block.
 `;
 }

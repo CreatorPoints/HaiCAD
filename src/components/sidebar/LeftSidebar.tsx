@@ -10,23 +10,33 @@ import {
   Copy,
   Check,
   AlertCircle,
-  Wrench,
+  Layers,
 } from 'lucide-react';
 import Editor from '@monaco-editor/react';
 import { ViewToolsPanel } from './ViewToolsPanel';
-import { CadToolsPanel } from './CadToolsPanel';
+import { CadModelingTreePanel } from './CadModelingTreePanel';
 import { AIChatPanel } from '../chat/AIChatPanel';
 import { RenderMode } from '../CADViewport';
 import { WorkerMeshOutput } from '../../cad/cadClient';
 import { useAiCad } from '../../hooks/useAiCad';
+import { CadFeature, CadToolMode } from '../../cad/cadModelingState';
 
-export type SidebarTab = 'ai_chat' | 'cad_tools' | 'view_tools' | 'ide';
+export type SidebarTab = 'ai_chat' | 'cad_features' | 'view_tools' | 'ide';
 
 interface LeftSidebarProps {
   activeTab: SidebarTab | null;
   onSelectTab: (tab: SidebarTab | null) => void;
   // AI CAD props
   aiCad: ReturnType<typeof useAiCad>;
+  // Feature Tree props
+  features: CadFeature[];
+  selectedFeatureId: string | null;
+  onSelectFeature: (id: string | null) => void;
+  onUpdateFeature: (id: string, updates: Partial<CadFeature>) => void;
+  onAddFeature: (type: CadFeature['type'], customParams?: any) => void;
+  onDeleteFeature: (id: string) => void;
+  toolMode: CadToolMode;
+  onSelectToolMode: (mode: CadToolMode) => void;
   // View Tools props
   renderMode: RenderMode;
   onSelectRenderMode: (mode: RenderMode) => void;
@@ -53,6 +63,14 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({
   activeTab,
   onSelectTab,
   aiCad,
+  features,
+  selectedFeatureId,
+  onSelectFeature,
+  onUpdateFeature,
+  onAddFeature,
+  onDeleteFeature,
+  toolMode,
+  onSelectToolMode,
   renderMode,
   onSelectRenderMode,
   showGrid,
@@ -89,7 +107,7 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({
     accentColor?: string;
   }> = [
     { id: 'ai_chat', label: 'AI CAD Agent', icon: Sparkles, accentColor: 'text-cyan' },
-    { id: 'cad_tools', label: 'CAD Tools Workbench', icon: Wrench, accentColor: 'text-amber-400' },
+    { id: 'cad_features', label: 'Feature Tree', icon: Layers, accentColor: 'text-amber-400' },
     { id: 'view_tools', label: 'View & Shaders', icon: SlidersHorizontal, accentColor: 'text-blue-400' },
     { id: 'ide', label: 'CAD Script IDE', icon: Code2, accentColor: 'text-primary' },
   ];
@@ -113,7 +131,7 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({
                   isActive
                     ? tab.id === 'ai_chat'
                       ? 'bg-cyan text-black shadow-md shadow-cyan/30 font-bold'
-                      : tab.id === 'cad_tools'
+                      : tab.id === 'cad_features'
                       ? 'bg-amber-400 text-black shadow-md shadow-amber-400/30 font-bold'
                       : 'bg-primary text-white shadow-md shadow-primary/30 font-bold'
                     : 'text-slate-400 hover:text-white hover:bg-surface-subtle'
@@ -145,13 +163,13 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({
           <div className="flex items-center justify-between px-4 py-3 border-b border-surface-border bg-surface-subtle/50 shrink-0">
             <div className="flex items-center gap-2">
               {activeTab === 'ai_chat' && <Sparkles className="w-4 h-4 text-cyan" />}
-              {activeTab === 'cad_tools' && <Wrench className="w-4 h-4 text-amber-400" />}
+              {activeTab === 'cad_features' && <Layers className="w-4 h-4 text-amber-400" />}
               {activeTab === 'view_tools' && <SlidersHorizontal className="w-4 h-4 text-cyan" />}
               {activeTab === 'ide' && <Code2 className="w-4 h-4 text-primary" />}
 
               <h2 className="text-xs font-bold uppercase tracking-wider text-white">
                 {activeTab === 'ai_chat' && 'AI Parametric CAD Agent'}
-                {activeTab === 'cad_tools' && 'CAD Modeling Workbench'}
+                {activeTab === 'cad_features' && 'Parametric Feature Tree'}
                 {activeTab === 'view_tools' && 'Viewport & Shaders'}
                 {activeTab === 'ide' && 'Parametric CAD Script IDE'}
               </h2>
@@ -191,12 +209,17 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({
               />
             )}
 
-            {/* CAD TOOLS WORKBENCH */}
-            {activeTab === 'cad_tools' && (
-              <CadToolsPanel
-                code={code}
-                onChangeCode={(newCode) => onChangeCode(newCode)}
-                onRunCode={onRunCode}
+            {/* FEATURE TREE & INSPECTOR PANEL */}
+            {activeTab === 'cad_features' && (
+              <CadModelingTreePanel
+                features={features}
+                selectedFeatureId={selectedFeatureId}
+                onSelectFeature={onSelectFeature}
+                onUpdateFeature={onUpdateFeature}
+                onAddFeature={onAddFeature}
+                onDeleteFeature={onDeleteFeature}
+                toolMode={toolMode}
+                onSelectToolMode={onSelectToolMode}
               />
             )}
 
