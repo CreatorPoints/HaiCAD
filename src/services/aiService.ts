@@ -1,4 +1,5 @@
 import { routeOptimalModel, RoutingDecision } from './modelRouter';
+import { performWebSearch, extractSearchableQuery, WebSearchResult } from './webSearchService';
 
 export interface AIPingLocation {
   id: string;
@@ -6,6 +7,26 @@ export interface AIPingLocation {
   action: string;
   position: [number, number, number];
   timestamp: number;
+}
+
+export interface ThoughtBlock {
+  title: string;
+  content: string;
+  durationSeconds: number;
+  tokenCount: number;
+}
+
+export interface ClarificationQuestion {
+  question: string;
+  options: string[];
+  explanation?: string;
+}
+
+export interface ToolCallEvent {
+  toolName: string;
+  query: string;
+  outputSummary: string;
+  sourceUrl?: string;
 }
 
 export interface APIKeyEntry {
@@ -231,26 +252,40 @@ Your job is to generate clean, robust, and executable JavaScript code using the 
    - shape.chamfer(dist, (edge) => edge.inDirection("X"))
    - Always ensure fillet radius is strictly smaller than the wall/feature thickness.
 
-5. Critical Rules & Output Contract:
-   - Your response MUST contain exactly ONE executable \`\`\`javascript ... \`\`\` code block.
-   - Do NOT output raw conversational text or preamble outside the code block.
-   - You MUST export or define a function with this signature:
-     function main({ draw, sketch, drawRoundedRectangle, drawCircle, drawRectangle, makeBox, makeCylinder, makeSphere, makeCone, makeTorus }) {
-       // Code here
-       return finalShape;
-     }
-   - The main() function MUST return a SINGLE valid fused 3D solid or compound (e.g. \`return body.fuse(cover);\`). Never return an array or object.
-   - All measurements are in millimeters (mm).
-   - In your code, annotate key feature locations using comments in the format:
-     \`// [PING: {"name": "Feature Name", "position": [x, y, z], "action": "Short Action Description"}]\`
+5. Agentic CAD Workflow:
+   - Step 1 (Thinking & Derivation): You may provide your step-by-step geometric derivation, trigonometric calculations, and CSG boolean assembly plan inside a <thought> ... </thought> block.
+   - Step 2 (Progressive Code): Output the complete, modular Replicad JavaScript inside exactly one \`\`\`javascript ... \`\`\` code block.
+   - Inside the code, start with \`const PARAMS = { ... };\` declaring all key dimensions.
+   - Structure into progressive steps using comments: \`// Step 1: Base geometry...\`, \`// Step 2: Cuts and pockets...\`, \`// Step 3: Pattern bores...\`, \`// Step 4: Fillets...\`.
+   - Place spatial radar comments: \`// [PING: {"name": "...", "position": [x, y, z], "action": "..."}]\`.
+   - Return a single fused watertight Solid from \`main({ draw, sketch, drawRoundedRectangle, drawCircle, makeBox, makeCylinder, makeSphere })\`.
 
 Example Response Format:
+<thought>
+Planning 3D solid construction:
+- Calculating bounding envelope: 40x40x4mm base plate.
+- Positioning M3 center hole at coordinate [0, 0, 0].
+- Applying boolean subtraction cut.
+</thought>
+
 \`\`\`javascript
 // Precision Parametric Solid
+const PARAMS = {
+  width: 40,
+  length: 40,
+  thickness: 4,
+  holeDiameter: 6,
+};
+
 function main({ makeBox, makeCylinder }) {
+  // Step 1: Extrude base plate
   // [PING: {"name": "Base Plate", "position": [0, 0, 2], "action": "Extruding base"}]
-  const base = makeBox(40, 40, 4);
-  const hole = makeCylinder(3, 10).translate([0, 0, -2]);
+  const base = makeBox(PARAMS.width, PARAMS.length, PARAMS.thickness);
+
+  // Step 2: Subtractive center hole cut
+  // [PING: {"name": "Center Bore", "position": [0, 0, 0], "action": "Cutting hole"}]
+  const hole = makeCylinder(PARAMS.holeDiameter / 2, PARAMS.thickness + 4).translate([0, 0, -2]);
+
   return base.cut(hole);
 }
 \`\`\`
@@ -467,6 +502,8 @@ export interface GenerateCADParams {
   openrouterKey?: string;
   onStepProgress?: (step: string) => void;
   onTokenStream?: (accumulatedText: string, newChunk: string) => void;
+  onThoughtStream?: (thoughtText: string) => void;
+  onToolCall?: (tool: ToolCallEvent) => void;
   onLivePing?: (ping: AIPingLocation) => void;
   onKeyRotated?: (event: KeyRotationEvent) => void;
   onKeyPoolUpdated?: (updatedPool: APIKeyEntry[]) => void;
@@ -479,6 +516,10 @@ export interface GenerateCADResult {
   steps: string[];
   usedKeyLabel?: string;
   routingDecision: RoutingDecision;
+  thought?: ThoughtBlock;
+  toolCalls?: ToolCallEvent[];
+  clarification?: ClarificationQuestion;
+  paramsSummary?: Record<string, number>;
 }
 
 async function fetchWithTimeout(url: string, options: RequestInit, timeoutMs = 25000): Promise<Response> {
@@ -517,6 +558,52 @@ export function extractSpatialPings(text: string): AIPingLocation[] {
     } catch {}
   }
   return pings;
+}
+
+export function extractThoughtBlock(text: string, durationMs = 3000): ThoughtBlock | undefined {
+  const match = text.match(/<thought>([\s\S]*?)<\/thought>/i);
+  if (match && match[1].trim()) {
+    const content = match[1].trim();
+    const tokenCount = Math.max(10, Math.round(content.length / 3.8));
+    return {
+      title: 'Reasoning & Geometric Formulation',
+      content,
+      durationSeconds: parseFloat((durationMs / 1000).toFixed(1)),
+      tokenCount,
+    };
+  }
+  return undefined;
+}
+
+export function extractClarification(text: string): ClarificationQuestion | undefined {
+  const match = text.match(/<clarification\s+question="([^"]+)"(?:\s+options="([^"]+)")?>([\s\S]*?)<\/clarification>/i);
+  if (match) {
+    const question = match[1].trim();
+    const optionsRaw = match[2] || '';
+    const explanation = match[3]?.trim();
+    const options = optionsRaw ? optionsRaw.split(',').map((o) => o.trim()).filter(Boolean) : [];
+    return { question, options, explanation };
+  }
+  return undefined;
+}
+
+export function extractParamsSummary(code: string): Record<string, number> | undefined {
+  const match = code.match(/const\s+PARAMS\s*=\s*(\{[\s\S]*?\});/);
+  if (match) {
+    try {
+      const jsonLike = match[1]
+        .replace(/([a-zA-Z0-9_]+)\s*:/g, '"$1":')
+        .replace(/,\s*}/g, '}')
+        .replace(/\/\/.*/g, '');
+      const parsed = JSON.parse(jsonLike);
+      const result: Record<string, number> = {};
+      for (const [k, v] of Object.entries(parsed)) {
+        if (typeof v === 'number') result[k] = v;
+      }
+      return Object.keys(result).length > 0 ? result : undefined;
+    } catch {}
+  }
+  return undefined;
 }
 
 export function extractExecutableCode(textResponse: string): string {
@@ -750,9 +837,34 @@ export async function generateCADCode(params: GenerateCADParams): Promise<Genera
     ];
   }
 
+  const startTime = Date.now();
+  const toolCalls: ToolCallEvent[] = [];
+
+  // Grounded Live Web Spec Tool: Search for standard dimensions if needed
+  const searchable = extractSearchableQuery(prompt);
+  let webHit: WebSearchResult | null = null;
+  if (searchable) {
+    onStepProgress?.(`🔍 Live Web Spec Tool: Looking up specifications for '${prompt.slice(0, 30)}'...`);
+    webHit = await performWebSearch(searchable);
+    if (webHit) {
+      const toolEvent: ToolCallEvent = {
+        toolName: 'WebSearch',
+        query: searchable,
+        outputSummary: `${webHit.title}: ${webHit.snippet.slice(0, 160)}...`,
+        sourceUrl: webHit.sourceUrl,
+      };
+      toolCalls.push(toolEvent);
+      params.onToolCall?.(toolEvent);
+    }
+  }
+
   let userContent = `User Request: ${prompt}`;
+  if (webHit) {
+    userContent = `[GROUNDED LIVE WEB SPECS - ${webHit.title}]\nSource: ${webHit.sourceUrl}\nVerified Standards & Dimensions:\n${webHit.snippet}\n\nUse these exact dimensions for your design.\n\n${userContent}`;
+  }
+
   if (currentCode && currentCode.trim().length > 0) {
-    userContent = `Current CAD Code:\n\`\`\`javascript\n${currentCode}\n\`\`\`\n\nModify or update the CAD model according to this instruction: ${prompt}`;
+    userContent = `Current CAD Code:\n\`\`\`javascript\n${currentCode}\n\`\`\`\n\nModify or update the CAD model according to this instruction: ${userContent}`;
   }
 
   // Combine base system prompt with task-specific custom directives
@@ -1016,6 +1128,10 @@ export async function generateCADCode(params: GenerateCADParams): Promise<Genera
     }
   });
 
+  const thought = extractThoughtBlock(textResponse, Date.now() - startTime);
+  const clarification = extractClarification(textResponse);
+  const paramsSummary = extractParamsSummary(extractedCode);
+
   return {
     code: extractedCode,
     rawResponse: textResponse,
@@ -1023,6 +1139,10 @@ export async function generateCADCode(params: GenerateCADParams): Promise<Genera
     steps: steps.length > 0 ? steps : ['Generating parametric geometry', 'Applying 3D constraints'],
     usedKeyLabel: successfulKey.label,
     routingDecision,
+    thought,
+    toolCalls: toolCalls.length > 0 ? toolCalls : undefined,
+    clarification,
+    paramsSummary,
   };
 }
 

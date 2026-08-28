@@ -22,12 +22,21 @@ import {
   Info,
   Layers,
   Flame,
+  Brain,
+  Search,
+  HelpCircle,
+  Sliders,
+  Terminal,
+  ExternalLink,
 } from 'lucide-react';
 import {
   DEFAULT_MODELS,
   AIModelOption,
   AIPingLocation,
   APIKeyEntry,
+  ThoughtBlock,
+  ClarificationQuestion,
+  ToolCallEvent,
 } from '../../services/aiService';
 import { RoutingDecision, TaskMode } from '../../services/modelRouter';
 import { CADPreset } from '../../cad/presets';
@@ -44,6 +53,10 @@ export interface ChatMessage {
   isError?: boolean;
   errorMessage?: string;
   usedKeyLabel?: string;
+  thought?: ThoughtBlock;
+  toolCalls?: ToolCallEvent[];
+  clarification?: ClarificationQuestion;
+  paramsSummary?: Record<string, number>;
 }
 
 interface AIChatPanelProps {
@@ -83,6 +96,11 @@ export const AIChatPanel: React.FC<AIChatPanelProps> = ({
   const [prompt, setPrompt] = useState('');
   const [showModelPicker, setShowModelPicker] = useState(false);
   const [copiedCodeId, setCopiedCodeId] = useState<string | null>(null);
+  const [expandedThoughts, setExpandedThoughts] = useState<Record<string, boolean>>({});
+
+  const toggleThought = (id: string) => {
+    setExpandedThoughts((prev) => ({ ...prev, [id]: !prev[id] }));
+  };
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -382,6 +400,123 @@ export const AIChatPanel: React.FC<AIChatPanelProps> = ({
                 {/* Content Text */}
                 <p className="text-xs whitespace-pre-wrap">{msg.content}</p>
 
+                {/* Tool Call Activity Cards (WebSearch, Grounding, Kernel) */}
+                {!isUser && msg.toolCalls && msg.toolCalls.length > 0 && (
+                  <div className="space-y-1.5 font-mono text-[11px]">
+                    {msg.toolCalls.map((tc, tcIdx) => (
+                      <div
+                        key={tcIdx}
+                        className="p-2.5 rounded-xl bg-background/90 border border-cyan/30 text-slate-300 space-y-1 shadow-sm"
+                      >
+                        <div className="flex items-center justify-between text-cyan font-bold">
+                          <span className="flex items-center gap-1.5">
+                            <Search className="w-3.5 h-3.5 text-cyan" />
+                            ● {tc.toolName}("{tc.query}")
+                          </span>
+                          <span className="text-[9px] px-1.5 py-0.2 rounded bg-cyan/10 text-cyan-glow border border-cyan/20">
+                            Live Tool
+                          </span>
+                        </div>
+                        <div className="text-[10px] text-slate-300 pl-3.5 border-l-2 border-cyan/40 leading-relaxed">
+                          ⎿ {tc.outputSummary}
+                        </div>
+                        {tc.sourceUrl && (
+                          <div className="pl-3.5">
+                            <a
+                              href={tc.sourceUrl}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="text-[9px] text-primary-glow hover:underline flex items-center gap-1"
+                            >
+                              <span>{tc.sourceUrl}</span>
+                              <ExternalLink className="w-2.5 h-2.5" />
+                            </a>
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* Collapsible Thought / Reasoning Stream Block */}
+                {!isUser && msg.thought && (
+                  <div className="rounded-xl border border-purple-500/30 bg-purple-950/20 overflow-hidden text-xs">
+                    <button
+                      type="button"
+                      onClick={() => toggleThought(msg.id)}
+                      className="w-full px-3 py-2 flex items-center justify-between text-purple-300 hover:text-white bg-purple-950/30 font-mono text-[10px] transition-colors"
+                    >
+                      <div className="flex items-center gap-1.5">
+                        <Brain className="w-3.5 h-3.5 text-purple-400" />
+                        <span className="font-bold">
+                          ▾ Thought for {msg.thought.durationSeconds}s ({msg.thought.tokenCount} tokens)
+                        </span>
+                      </div>
+                      <ChevronDown
+                        className={`w-3.5 h-3.5 text-purple-400 transition-transform duration-200 ${
+                          expandedThoughts[msg.id] ? 'rotate-180' : ''
+                        }`}
+                      />
+                    </button>
+                    {expandedThoughts[msg.id] && (
+                      <div className="p-3 text-[10px] font-mono text-purple-200/90 whitespace-pre-wrap bg-background/90 border-t border-purple-500/20 leading-relaxed max-h-52 overflow-y-auto">
+                        {msg.thought.content}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Interactive Clarification Card (Ask If in Doubt) */}
+                {!isUser && msg.clarification && (
+                  <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/30 space-y-2 text-xs">
+                    <div className="flex items-center gap-1.5 text-amber-300 font-bold font-mono text-[11px]">
+                      <HelpCircle className="w-3.5 h-3.5" />
+                      <span>{msg.clarification.question}</span>
+                    </div>
+                    {msg.clarification.explanation && (
+                      <p className="text-slate-300 text-[10px]">{msg.clarification.explanation}</p>
+                    )}
+                    {msg.clarification.options.length > 0 && (
+                      <div className="flex flex-wrap gap-1.5 pt-1">
+                        {msg.clarification.options.map((opt, oIdx) => (
+                          <button
+                            key={oIdx}
+                            type="button"
+                            onClick={() => onSendMessage(opt, selectedModel)}
+                            className="px-2.5 py-1 rounded-lg bg-surface border border-amber-500/40 text-amber-200 hover:bg-amber-500/20 hover:text-white text-[11px] font-mono transition-all shadow-sm"
+                          >
+                            {opt}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Parametric Drivers (PARAMS) Table */}
+                {!isUser && msg.paramsSummary && Object.keys(msg.paramsSummary).length > 0 && (
+                  <div className="p-2.5 rounded-xl bg-background/80 border border-surface-border font-mono text-[10px] space-y-1.5">
+                    <div className="text-[10px] uppercase text-slate-400 font-bold flex items-center justify-between">
+                      <span className="flex items-center gap-1">
+                        <Sliders className="w-3 h-3 text-cyan" />
+                        Design Drivers (PARAMS)
+                      </span>
+                      <span className="text-[9px] text-slate-500">Auto-extracted</span>
+                    </div>
+                    <div className="grid grid-cols-2 gap-1 pt-0.5">
+                      {Object.entries(msg.paramsSummary).map(([k, v]) => (
+                        <div
+                          key={k}
+                          className="flex items-center justify-between px-2 py-1 rounded bg-surface border border-surface-border/50 text-[10px]"
+                        >
+                          <span className="text-slate-400 truncate">{k}:</span>
+                          <span className="text-cyan font-bold">{v}mm</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
                 {/* Assistant Metadata: Autonomous Routing Badge */}
                 {!isUser && msg.routingDecision && (
                   <div className="p-2 rounded-xl bg-background/80 border border-surface-border/70 space-y-1 font-mono text-[10px]">
@@ -403,8 +538,8 @@ export const AIChatPanel: React.FC<AIChatPanelProps> = ({
                 {/* Human-Readable Steps List */}
                 {!isUser && msg.steps && msg.steps.length > 0 && (
                   <div className="space-y-1 pt-1 border-t border-surface-border/40">
-                    <span className="text-[10px] font-mono uppercase text-slate-400 font-bold block">
-                      Operations Executed:
+                    <span className="text-[10px] font-mono uppercase text-slate-400 font-bold flex items-center gap-1">
+                      <Layers className="w-3 h-3 text-cyan" /> Operations Executed:
                     </span>
                     <div className="space-y-1">
                       {msg.steps.map((step, idx) => (

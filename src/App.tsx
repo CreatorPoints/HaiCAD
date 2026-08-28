@@ -176,6 +176,10 @@ export const App: React.FC = () => {
             routingDecision: result.routingDecision,
             steps: result.steps.length > 0 ? result.steps : [result.routingDecision.reason],
             usedKeyLabel: result.usedKeyLabel,
+            thought: result.thought,
+            toolCalls: result.toolCalls,
+            clarification: result.clarification,
+            paramsSummary: result.paramsSummary,
           },
         ]);
       } else {
@@ -206,6 +210,10 @@ export const App: React.FC = () => {
               pings: result.pings,
               codeSnippet: result.code,
               usedKeyLabel: result.usedKeyLabel,
+              thought: result.thought,
+              toolCalls: result.toolCalls,
+              clarification: result.clarification,
+              paramsSummary: result.paramsSummary,
             },
           ]);
         } else {
@@ -246,6 +254,9 @@ export const App: React.FC = () => {
                 pings: fixResult.pings,
                 codeSnippet: fixResult.code,
                 usedKeyLabel: fixResult.usedKeyLabel,
+                thought: fixResult.thought,
+                toolCalls: fixResult.toolCalls,
+                paramsSummary: fixResult.paramsSummary,
               },
             ]);
           } else {

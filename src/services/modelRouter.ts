@@ -307,9 +307,11 @@ export function getCustomInstructions(mode: TaskMode, modelId: string): string {
     case 'REASONING':
       return `
 [STRICT EXPERT DIRECTIVE: MATHEMATICAL REASONING SPECIALIST]
-0. Mandatory Output Format:
-   - Your response MUST contain exactly one executable \`\`\`javascript ... \`\`\` code block containing the main() function.
-   - Do NOT output raw conversational text or markdown outside the code block.
+0. Agentic CAD Workflow:
+   - Step 1: Provide your geometric derivation, trigonometric calculations, and CSG boolean assembly plan inside a <thought> ... </thought> block.
+   - Step 2: Output the complete, modular Replicad JavaScript inside exactly one \`\`\`javascript ... \`\`\` code block.
+   - Start the code with \`const PARAMS = { ... };\` declaring all dimensions.
+   - Structure code into sequential steps with comments: \`// Step 1: ...\`, \`// Step 2: ...\`.
    - The main() function MUST return a single fused 3D solid (e.g. \`return body.fuse(cover);\`).
 1. Exact Coordinate Calculations:
    - Compute all polar, cartesian, and trigonometric coordinates with high precision in millimeters (mm).
@@ -324,8 +326,9 @@ export function getCustomInstructions(mode: TaskMode, modelId: string): string {
     case 'KERNEL_REPAIR':
       return `
 [STRICT EXPERT DIRECTIVE: SELF-HEALING KERNEL REPAIR]
-0. Mandatory Output Format:
-   - Output ONLY the fixed executable code in a single \`\`\`javascript ... \`\`\` code block.
+0. Agentic CAD Workflow:
+   - Step 1: Explain the root cause of the OpenCASCADE error inside a <thought> ... </thought> block.
+   - Step 2: Output ONLY the fixed executable code in a single \`\`\`javascript ... \`\`\` code block.
 1. Debug the OpenCASCADE error directly. Resolve non-manifold edges, zero-thickness wall artifacts, and unclosed sketch loops.
 2. Return complete, verified, executable Replicad JavaScript with \`function main({ draw, drawCircle, drawRoundedRectangle, makeBox, makeCylinder, makeSphere }) { ... return shape; }\`.
 `;
@@ -340,9 +343,11 @@ export function getCustomInstructions(mode: TaskMode, modelId: string): string {
     default:
       return `
 [STRICT EXPERT DIRECTIVE: CODE IMPLEMENTATION SPECIALIST]
-0. Mandatory Output Format:
-   - Your response MUST contain exactly one executable \`\`\`javascript ... \`\`\` code block containing the main() function.
-   - Do NOT output raw conversational text or markdown outside the code block.
+0. Agentic CAD Workflow:
+   - Step 1: Provide your geometric planning and CSG strategy inside a <thought> ... </thought> block.
+   - Step 2: Output the complete, modular Replicad JavaScript inside exactly one \`\`\`javascript ... \`\`\` code block.
+   - Start the code with \`const PARAMS = { ... };\` declaring all dimensions.
+   - Structure code into progressive steps with comments: \`// Step 1: Base profile\`, \`// Step 2: Cuts and pockets\`, \`// Step 3: Fastener bores\`, \`// Step 4: Fillets\`.
    - The main() function MUST return a single valid 3D solid (e.g. \`return basePlate;\`).
 1. Directional Edge Fillets:
    - When filleting, use directional edge filters like \`shape.fillet(r, (e) => e.inDirection("Z"))\` or safe radii.
