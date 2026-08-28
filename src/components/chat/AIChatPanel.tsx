@@ -58,6 +58,7 @@ export const AIChatPanel: React.FC<AIChatPanelProps> = ({ aiCad, onApplyCodeToId
   const [isModifying, setIsModifying] = useState(false);
   const [showKeyModal, setShowKeyModal] = useState(!apiKey);
   const [tempApiKey, setTempApiKey] = useState(apiKey);
+  const [tempModel, setTempModel] = useState(model || 'openrouter/free');
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   // Auto-scroll on new messages
@@ -76,6 +77,9 @@ export const AIChatPanel: React.FC<AIChatPanelProps> = ({ aiCad, onApplyCodeToId
   const handleSaveKey = (e: React.FormEvent) => {
     e.preventDefault();
     setApiKey(tempApiKey);
+    if (tempModel.trim()) {
+      setModel(tempModel.trim());
+    }
     setShowKeyModal(false);
   };
 
@@ -95,27 +99,63 @@ export const AIChatPanel: React.FC<AIChatPanelProps> = ({ aiCad, onApplyCodeToId
 
   return (
     <div className="flex flex-col h-full bg-surface select-none relative overflow-hidden">
-      {/* 1. API Key Config Modal */}
+      {/* 1. API Key & Model Config Modal */}
       {showKeyModal && (
         <div className="absolute inset-0 z-50 bg-background/80 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="w-full max-w-sm bg-surface border border-surface-border rounded-2xl shadow-2xl p-5 flex flex-col gap-4 animate-in fade-in zoom-in duration-200">
             <div className="flex items-center gap-2 text-cyan">
               <Key className="w-5 h-5" />
-              <h3 className="font-bold text-sm text-white">OpenRouter API Key</h3>
+              <h3 className="font-bold text-sm text-white">OpenRouter Settings</h3>
             </div>
             <p className="text-xs text-slate-400">
-              HaiCAD connects directly to OpenRouter from your browser to run free-tier models (like <code className="text-cyan font-mono">google/gemma-2-9b-it:free</code>).
+              HaiCAD connects directly to OpenRouter. By default it uses the <code className="text-cyan font-mono font-bold">openrouter/free</code> router.
             </p>
             <form onSubmit={handleSaveKey} className="flex flex-col gap-3">
-              <input
-                type="password"
-                placeholder="sk-or-v1-..."
-                value={tempApiKey}
-                onChange={(e) => setTempApiKey(e.target.value)}
-                className="w-full px-3 py-2 text-xs bg-surface-subtle border border-surface-border rounded-xl text-white placeholder:text-slate-500 focus:outline-none focus:border-cyan"
-                autoFocus
-              />
-              <div className="flex items-center justify-end gap-2">
+              <div className="space-y-1">
+                <label className="text-[11px] font-semibold text-slate-300">API Key</label>
+                <input
+                  type="password"
+                  placeholder="sk-or-v1-..."
+                  value={tempApiKey}
+                  onChange={(e) => setTempApiKey(e.target.value)}
+                  className="w-full px-3 py-2 text-xs bg-surface-subtle border border-surface-border rounded-xl text-white placeholder:text-slate-500 focus:outline-none focus:border-cyan"
+                  autoFocus
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-[11px] font-semibold text-slate-300">Model</label>
+                <input
+                  type="text"
+                  placeholder="openrouter/free"
+                  value={tempModel}
+                  onChange={(e) => setTempModel(e.target.value)}
+                  className="w-full px-3 py-2 text-xs bg-surface-subtle border border-surface-border rounded-xl text-white placeholder:text-slate-500 focus:outline-none focus:border-cyan font-mono"
+                />
+                <div className="flex flex-wrap gap-1 pt-1">
+                  {[
+                    'openrouter/free',
+                    'meta-llama/llama-3.3-70b-instruct:free',
+                    'mistralai/mistral-7b-instruct:free',
+                    'qwen/qwen-2.5-coder-32b-instruct:free',
+                  ].map((m) => (
+                    <button
+                      key={m}
+                      type="button"
+                      onClick={() => setTempModel(m)}
+                      className={`text-[10px] font-mono px-1.5 py-0.5 rounded border transition-colors ${
+                        tempModel === m
+                          ? 'bg-cyan/20 border-cyan text-cyan'
+                          : 'bg-surface border-surface-border text-slate-400 hover:text-white'
+                      }`}
+                    >
+                      {m.split('/')[1] || m}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-2">
                 {apiKey && (
                   <button
                     type="button"
@@ -130,7 +170,7 @@ export const AIChatPanel: React.FC<AIChatPanelProps> = ({ aiCad, onApplyCodeToId
                   disabled={!tempApiKey.trim()}
                   className="px-4 py-1.5 text-xs font-semibold rounded-xl bg-cyan hover:bg-cyan-hover text-black shadow-md shadow-cyan/20 transition-all disabled:opacity-50"
                 >
-                  Save API Key
+                  Save Settings
                 </button>
               </div>
             </form>

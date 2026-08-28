@@ -14,7 +14,7 @@ export interface OpenRouterCompletionOptions {
   maxTokens?: number;
 }
 
-export const DEFAULT_OPENROUTER_MODEL = 'google/gemma-2-9b-it:free';
+export const DEFAULT_OPENROUTER_MODEL = 'openrouter/free';
 const STORAGE_KEY_API_KEY = 'haicad_openrouter_api_key';
 const STORAGE_KEY_MODEL = 'haicad_openrouter_model';
 
@@ -30,7 +30,11 @@ export function setStoredOpenRouterKey(key: string): void {
 
 export function getStoredOpenRouterModel(): string {
   if (typeof window === 'undefined') return DEFAULT_OPENROUTER_MODEL;
-  return localStorage.getItem(STORAGE_KEY_MODEL) || DEFAULT_OPENROUTER_MODEL;
+  const stored = localStorage.getItem(STORAGE_KEY_MODEL);
+  if (!stored || stored.includes('gemma')) {
+    return DEFAULT_OPENROUTER_MODEL;
+  }
+  return stored;
 }
 
 export function setStoredOpenRouterModel(model: string): void {
@@ -55,7 +59,7 @@ export class OpenRouterService {
 
     if (!apiKey) {
       throw new Error(
-        'OpenRouter API Key is required. Please set your API key in the HaiCAD settings or BYOK panel.'
+        'OpenRouter API Key is required. Please enter your API key in the AI settings modal (key icon).'
       );
     }
 
