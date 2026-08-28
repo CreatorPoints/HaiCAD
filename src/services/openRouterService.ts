@@ -1,11 +1,15 @@
 /**
  * OpenRouter API Client Service for HaiCAD
- * Implements autonomous multi-model fallback & cycling
+ * Implements autonomous multi-model fallback & cycling across user-selected free models
  */
+
+export type OpenRouterContentPart =
+  | { type: 'text'; text: string }
+  | { type: 'image_url'; image_url: { url: string } };
 
 export interface OpenRouterMessage {
   role: 'system' | 'user' | 'assistant';
-  content: string;
+  content: string | OpenRouterContentPart[];
 }
 
 export interface OpenRouterCompletionOptions {
@@ -24,13 +28,18 @@ export type ModelCycleCallback = (
 export const FREE_MODELS_PRESETS = [
   'inclusionai/ling-3.0-flash-fin:free',
   'dots-studio/dots-3-note-preview:free',
-  'google/gemma-4-31b-it:free',
-  'nvidia/nemotron-3-ultra-550b-a55b:free',
-  'nvidia/nemotron-3-super-120b-a12b:free',
-  'minimax/minimax-m3:free',
-  'minimax/minimax-m2.7:free',
+  'thinkingmachines/inkling:free',
+  'thinkingmachines/inkling-small:free',
+  'poolside/laguna-s-2.1:free',
+  'poolside/laguna-xs-2.1:free',
   'cohere/north-mini-code:free',
   'z-ai/glm-5.2:free',
+  'nvidia/nemotron-3-ultra-550b-a55b:free',
+  'minimax/minimax-m3:free',
+  'google/gemma-4-31b-it:free',
+  'minimax/minimax-m2.7:free',
+  'nvidia/nemotron-3-super-120b-a12b:free',
+  'liquid/lfm-2.5-2.6b:free',
   'nvidia/nemotron-3.5-lightning:free',
   'meta-llama/llama-3.3-70b-instruct:free',
   'mistralai/mistral-7b-instruct:free',
@@ -54,14 +63,7 @@ export function setStoredOpenRouterKey(key: string): void {
 export function getStoredOpenRouterModel(): string {
   if (typeof window === 'undefined') return DEFAULT_OPENROUTER_MODEL;
   const stored = localStorage.getItem(STORAGE_KEY_MODEL);
-  if (
-    !stored ||
-    stored.includes('gemma-2') ||
-    stored === 'openrouter/free' ||
-    stored.includes('inkling') ||
-    stored.includes('laguna') ||
-    stored.includes('liquid')
-  ) {
+  if (!stored || stored.includes('gemma-2') || stored === 'openrouter/free') {
     return DEFAULT_OPENROUTER_MODEL;
   }
   return stored;

@@ -35,7 +35,14 @@ export interface DesignParameters {
   [key: string]: any;
 }
 
-export type MessageRole = 'user' | 'assistant' | 'system' | 'ai-correction';
+export interface AiAttachment {
+  id: string;
+  name: string;
+  type: string;
+  size: number;
+  dataUrl?: string; // base64 for images
+  textContent?: string; // text content for documents/code/step/svg
+}
 
 export interface AiCadMessage {
   id: string;
@@ -50,6 +57,7 @@ export interface AiCadMessage {
   error?: string;
   suggestedOptions?: string[];
   modelUsed?: string;
+  attachments?: AiAttachment[];
 }
 
 export interface PhaseCodeRegistry {

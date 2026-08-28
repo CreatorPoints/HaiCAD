@@ -358,18 +358,19 @@ export function useAiCad(config: AiCadConfig = {}) {
   );
 
   /**
-   * Handles user text input across all phases with live editor context awareness & direct code execution
+   * Handles user text input and file/image attachments with live editor context awareness & direct code execution
    */
   const sendMessage = useCallback(
-    async (userInput: string) => {
+    async (userInput: string, attachments?: AiAttachment[]) => {
       const trimmed = userInput.trim();
-      if (!trimmed) return;
+      if (!trimmed && (!attachments || attachments.length === 0)) return;
 
-      // Add user message
+      // Add user message to history
       addMessage({
         role: 'user',
-        content: trimmed,
+        content: trimmed || (attachments?.length ? `Attached ${attachments.length} file(s)` : ''),
         phase,
+        attachments,
       });
 
       // Handle active verification state if user types text while verification is pending
@@ -397,6 +398,33 @@ export function useAiCad(config: AiCadConfig = {}) {
       setLastError(null);
 
       try {
+        // Format text content including non-image file texts
+        let fullUserPrompt = trimmed;
+        if (attachments && attachments.length > 0) {
+          for (const att of attachments) {
+            if (att.textContent) {
+              fullUserPrompt += `\n\n[ATTACHED FILE: ${att.name}]:\n\`\`\`\n${att.textContent}\n\`\`\``;
+            }
+          }
+        }
+
+        // Check for image attachments
+        const imageAttachments = attachments?.filter((a) => a.dataUrl && a.type.startsWith('image/')) || [];
+
+        // Build user content part (either string or multi-modal array)
+        let userTurnContent: string | any[];
+        if (imageAttachments.length > 0) {
+          userTurnContent = [
+            { type: 'text', text: fullUserPrompt || 'Please inspect this attached CAD drawing/reference image and generate or modify the model:' },
+            ...imageAttachments.map((img) => ({
+              type: 'image_url',
+              image_url: { url: img.dataUrl },
+            })),
+          ];
+        } else {
+          userTurnContent = fullUserPrompt;
+        }
+
         const planningHistory = messages
           .filter((m) => m.role === 'user' || m.role === 'assistant')
           .slice(-6)
@@ -409,7 +437,7 @@ export function useAiCad(config: AiCadConfig = {}) {
           [
             { role: 'system', content: buildPlanningPrompt(currentEditorCodeRef.current) },
             ...planningHistory,
-            { role: 'user', content: trimmed },
+            { role: 'user', content: userTurnContent },
           ],
           { apiKey, model },
           handleModelCycle

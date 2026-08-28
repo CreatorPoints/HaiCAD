@@ -146,10 +146,9 @@ export const CADViewport = forwardRef<CADViewportHandle, CADViewportProps>(
       // 7. Add Geometry Mesh Group
       scene.add(meshGroupRef.current);
 
-      // 8. OrbitControls Setup
+      // 8. OrbitControls Setup (Hardstop engineering camera, zero glide damping)
       const controls = new OrbitControls(camera, renderer.domElement);
-      controls.enableDamping = true;
-      controls.dampingFactor = 0.05;
+      controls.enableDamping = false;
       controls.target.set(0, 0, 10);
       controls.maxDistance = 1200;
       controls.minDistance = 2;
