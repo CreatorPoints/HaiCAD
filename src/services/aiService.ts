@@ -671,25 +671,49 @@ export async function generateCADCode(params: GenerateCADParams): Promise<Genera
   console.log('[HaiCAD AI] Autonomous Routing:', routingDecision);
   onStepProgress?.(`Autonomous Routing: ${routingDecision.reason}...`);
 
-  // Get active keys for this provider
+  // 1. Gather all active keys across all providers
   const now = Date.now();
-  const providerKeys = keyPool.filter((k) => k.provider === provider && k.isActive);
+  const primaryProvider: 'gemini' | 'openrouter' = routingDecision.provider;
+  const secondaryProvider: 'gemini' | 'openrouter' = primaryProvider === 'gemini' ? 'openrouter' : 'gemini';
 
-  if (providerKeys.length === 0) {
-    const providerName = provider === 'gemini' ? 'Google Gemini' : 'OpenRouter';
+  const primaryKeys = keyPool.filter((k) => k.provider === primaryProvider && k.isActive);
+  const secondaryKeys = keyPool.filter((k) => k.provider === secondaryProvider && k.isActive);
+
+  if (primaryKeys.length === 0 && secondaryKeys.length === 0) {
     throw new Error(
-      `No active API keys found for ${providerName} to run ${routingDecision.modelName}. Please add an API key in the BYOK panel on the left.`
+      `No active API keys found. Please add a Google Gemini or OpenRouter API key in the BYOK panel on the left.`
     );
   }
 
-  // Sort keys: healthy keys first (not rate limited or rate limit expired), then least recently failed
-  const sortedKeys = [...providerKeys].sort((a, b) => {
+  const sortFn = (a: APIKeyEntry, b: APIKeyEntry) => {
     const aLimited = a.isRateLimited && (a.rateLimitedUntil || 0) > now;
     const bLimited = b.isRateLimited && (b.rateLimitedUntil || 0) > now;
     if (!aLimited && bLimited) return -1;
     if (aLimited && !bLimited) return 1;
     return (a.failedCalls || 0) - (b.failedCalls || 0);
-  });
+  };
+
+  primaryKeys.sort(sortFn);
+  secondaryKeys.sort(sortFn);
+
+  // If primary has no healthy keys and secondary does, prioritize secondary
+  const primaryHealthy = primaryKeys.filter((k) => !k.isRateLimited || (k.rateLimitedUntil || 0) <= now);
+  const secondaryHealthy = secondaryKeys.filter((k) => !k.isRateLimited || (k.rateLimitedUntil || 0) <= now);
+
+  let candidateAttempts: Array<{ key: APIKeyEntry; provider: 'gemini' | 'openrouter'; isCrossProvider: boolean }> = [];
+
+  if (primaryHealthy.length > 0 || secondaryHealthy.length === 0) {
+    candidateAttempts = [
+      ...primaryKeys.map((k) => ({ key: k, provider: primaryProvider, isCrossProvider: false })),
+      ...secondaryKeys.map((k) => ({ key: k, provider: secondaryProvider, isCrossProvider: true })),
+    ];
+  } else {
+    // Primary is rate limited, secondary is ready!
+    candidateAttempts = [
+      ...secondaryKeys.map((k) => ({ key: k, provider: secondaryProvider, isCrossProvider: true })),
+      ...primaryKeys.map((k) => ({ key: k, provider: primaryProvider, isCrossProvider: false })),
+    ];
+  }
 
   let userContent = `User Request: ${prompt}`;
   if (currentCode && currentCode.trim().length > 0) {
@@ -703,23 +727,45 @@ export async function generateCADCode(params: GenerateCADParams): Promise<Genera
   let successfulKey: APIKeyEntry | null = null;
   const errorsEncountered: Array<{ keyLabel: string; error: string }> = [];
 
-  // Key failover loop
-  for (let i = 0; i < sortedKeys.length; i++) {
-    const candidateKey = sortedKeys[i];
-    const keyLabel = candidateKey.label || `Key #${i + 1}`;
+  // Key failover loop (supports intra-provider & cross-provider automatic failover)
+  for (let i = 0; i < candidateAttempts.length; i++) {
+    const attempt = candidateAttempts[i];
+    const candidateKey = attempt.key;
+    const currentProvider = attempt.provider;
+    const keyLabel = candidateKey.label || `${currentProvider === 'gemini' ? 'Gemini' : 'OpenRouter'} Key #${i + 1}`;
 
-    onStepProgress?.(
-      sortedKeys.length > 1
-        ? `Connecting to ${routingDecision.modelName} via ${keyLabel} (${i + 1}/${sortedKeys.length})...`
-        : `Connecting to ${routingDecision.modelName}...`
-    );
+    // Determine model to use for this attempt
+    let activeModelForAttempt = effectiveModel;
+    if (currentProvider !== primaryProvider) {
+      // Cross-provider failover model selection
+      if (currentProvider === 'openrouter') {
+        activeModelForAttempt =
+          routingDecision.taskAnalysis.mode === 'REASONING'
+            ? 'nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free'
+            : 'cohere/north-mini-code:free';
+      } else {
+        activeModelForAttempt = 'gemini-3.6-flash';
+      }
+    }
+
+    if (attempt.isCrossProvider) {
+      onStepProgress?.(
+        `Cross-provider failover: Switching to ${currentProvider === 'openrouter' ? 'OpenRouter' : 'Google Gemini'} (${activeModelForAttempt}) via ${keyLabel}...`
+      );
+    } else {
+      onStepProgress?.(
+        candidateAttempts.length > 1
+          ? `Connecting to ${activeModelForAttempt} via ${keyLabel} (${i + 1}/${candidateAttempts.length})...`
+          : `Connecting to ${activeModelForAttempt}...`
+      );
+    }
 
     try {
       candidateKey.totalCalls = (candidateKey.totalCalls || 0) + 1;
       candidateKey.lastUsed = Date.now();
 
-      if (provider === 'gemini') {
-        let modelToCall = effectiveModel;
+      if (currentProvider === 'gemini') {
+        let modelToCall = activeModelForAttempt;
         let apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${modelToCall}:streamGenerateContent?alt=sse&key=${candidateKey.key.trim()}`;
         let res = await fetchWithTimeout(apiUrl, {
           method: 'POST',
@@ -771,7 +817,8 @@ export async function generateCADCode(params: GenerateCADParams): Promise<Genera
         textResponse = await readGeminiSSEStream(res, onTokenStream, onLivePing);
       } else {
         // OpenRouter SSE Stream
-        const res = await fetchWithTimeout('https://openrouter.ai/api/v1/chat/completions', {
+        let modelToCall = activeModelForAttempt;
+        let res = await fetchWithTimeout('https://openrouter.ai/api/v1/chat/completions', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -780,7 +827,7 @@ export async function generateCADCode(params: GenerateCADParams): Promise<Genera
             'X-Title': 'HaiCAD Studio',
           },
           body: JSON.stringify({
-            model: effectiveModel,
+            model: modelToCall,
             stream: true,
             messages: [
               { role: 'system', content: fullSystemPrompt },
@@ -789,6 +836,40 @@ export async function generateCADCode(params: GenerateCADParams): Promise<Genera
             temperature: 0.2,
           }),
         }, 25000);
+
+        // If OpenRouter model fails, cascade through other free OpenRouter models
+        if (!res.ok) {
+          const fallbackORModels = [
+            'cohere/north-mini-code:free',
+            'nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free',
+            'google/gemma-4-31b-it:free',
+            'openrouter/free',
+          ];
+          for (const fallbackModel of fallbackORModels) {
+            if (fallbackModel === modelToCall) continue;
+            onStepProgress?.(`Auto-fallback to OpenRouter ${fallbackModel}...`);
+            modelToCall = fallbackModel;
+            res = await fetchWithTimeout('https://openrouter.ai/api/v1/chat/completions', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                Authorization: `Bearer ${candidateKey.key.trim()}`,
+                'HTTP-Referer': window.location.origin || 'https://haicad.studio',
+                'X-Title': 'HaiCAD Studio',
+              },
+              body: JSON.stringify({
+                model: modelToCall,
+                stream: true,
+                messages: [
+                  { role: 'system', content: fullSystemPrompt },
+                  { role: 'user', content: userContent },
+                ],
+                temperature: 0.2,
+              }),
+            }, 25000);
+            if (res.ok) break;
+          }
+        }
 
         if (!res.ok) {
           const errJson = await res.json().catch(() => ({}));
@@ -838,16 +919,18 @@ export async function generateCADCode(params: GenerateCADParams): Promise<Genera
       onKeyPoolUpdated?.([...keyPool]);
 
       // If there are more keys, trigger rotation notification and retry
-      if (i < sortedKeys.length - 1) {
-        const nextKey = sortedKeys[i + 1];
+      if (i < candidateAttempts.length - 1) {
+        const nextAttempt = candidateAttempts[i + 1];
+        const nextKey = nextAttempt.key;
+        const nextLabel = nextKey.label || `${nextAttempt.provider === 'gemini' ? 'Gemini' : 'OpenRouter'} Key #${i + 2}`;
         const reason = isRateLimit ? 'Rate limit / 429 hit' : `API error (${errMsg.slice(0, 40)})`;
         onKeyRotated?.({
-          provider,
+          provider: nextAttempt.provider,
           fromKeyLabel: keyLabel,
-          toKeyLabel: nextKey.label,
+          toKeyLabel: nextLabel,
           reason,
         });
-        onStepProgress?.(`Key '${keyLabel}' rate limited. Auto-switching to '${nextKey.label}'...`);
+        onStepProgress?.(`Key '${keyLabel}' rate limited. Auto-switching to '${nextLabel}'...`);
         // Small backoff before next key
         await new Promise((r) => setTimeout(r, 400));
       }
@@ -857,7 +940,7 @@ export async function generateCADCode(params: GenerateCADParams): Promise<Genera
   if (!successfulKey || !textResponse) {
     const errorDetails = errorsEncountered.map((e) => `• [${e.keyLabel}]: ${e.error}`).join('\n');
     throw new Error(
-      `All ${provider.toUpperCase()} API keys failed or were rate-limited:\n${errorDetails}\n\nPlease add more keys in the BYOK panel or wait for cooldown.`
+      `All available API keys across providers failed or were rate-limited:\n${errorDetails}\n\nPlease add more keys in the BYOK panel or wait for cooldown.`
     );
   }
 
