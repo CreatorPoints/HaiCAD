@@ -18,8 +18,12 @@ import {
   Copy,
   Check,
   Cpu,
+  Paperclip,
+  Image as ImageIcon,
+  X,
+  FileText,
 } from 'lucide-react';
-import { CadPhase, VerificationAction } from '../../types/aiCadTypes';
+import { CadPhase, VerificationAction, AiAttachment } from '../../types/aiCadTypes';
 import { useAiCad } from '../../hooks/useAiCad';
 import { FREE_MODELS_PRESETS } from '../../services/openRouterService';
 
@@ -104,25 +108,118 @@ export const AIChatPanel: React.FC<AIChatPanelProps> = ({ aiCad }) => {
   } = aiCad;
 
   const [input, setInput] = useState('');
+  const [attachments, setAttachments] = useState<AiAttachment[]>([]);
+  const [isDragging, setIsDragging] = useState(false);
   const [modifyNote, setModifyNote] = useState('');
   const [isModifying, setIsModifying] = useState(false);
   const [showKeyModal, setShowKeyModal] = useState(!apiKey);
   const [tempApiKey, setTempApiKey] = useState(apiKey);
   const [tempModel, setTempModel] = useState(model || 'inclusionai/ling-3.0-flash-fin:free');
   const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null);
+
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   // Auto-scroll on new messages
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages, isLoading, isCorrecting]);
+  }, [messages, isLoading, isCorrecting, attachments]);
+
+  // Read files and convert to AiAttachment
+  const processFiles = async (files: FileList | File[]) => {
+    const newAttachments: AiAttachment[] = [];
+
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
+      const isImage = file.type.startsWith('image/');
+      const id = 'att_' + Math.random().toString(36).substring(2, 9);
+
+      if (isImage) {
+        const dataUrl = await new Promise<string>((resolve) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(reader.result as string);
+          reader.readAsDataURL(file);
+        });
+        newAttachments.push({
+          id,
+          name: file.name,
+          type: file.type || 'image/png',
+          size: file.size,
+          dataUrl,
+        });
+      } else {
+        const textContent = await new Promise<string>((resolve) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(reader.result as string);
+          reader.readAsText(file);
+        });
+        newAttachments.push({
+          id,
+          name: file.name,
+          type: file.type || 'text/plain',
+          size: file.size,
+          textContent,
+        });
+      }
+    }
+
+    setAttachments((prev) => [...prev, ...newAttachments]);
+  };
+
+  const handleFileInputChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files.length > 0) {
+      await processFiles(e.target.files);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  };
+
+  const handlePaste = async (e: React.ClipboardEvent) => {
+    const items = e.clipboardData.items;
+    const filesToProcess: File[] = [];
+
+    for (let i = 0; i < items.length; i++) {
+      if (items[i].type.startsWith('image/')) {
+        const file = items[i].getAsFile();
+        if (file) filesToProcess.push(file);
+      }
+    }
+
+    if (filesToProcess.length > 0) {
+      e.preventDefault();
+      await processFiles(filesToProcess);
+    }
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(true);
+  };
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(false);
+  };
+
+  const handleDrop = async (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(false);
+    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+      await processFiles(e.dataTransfer.files);
+    }
+  };
+
+  const handleRemoveAttachment = (id: string) => {
+    setAttachments((prev) => prev.filter((a) => a.id !== id));
+  };
 
   const handleSend = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
-    if (!input.trim() || isLoading) return;
+    if ((!input.trim() && attachments.length === 0) || isLoading) return;
     const text = input;
+    const pendingAtts = [...attachments];
     setInput('');
-    await sendMessage(text);
+    setAttachments([]);
+    await sendMessage(text, pendingAtts);
   };
 
   const handleSaveKey = (e: React.FormEvent) => {
@@ -155,7 +252,15 @@ export const AIChatPanel: React.FC<AIChatPanelProps> = ({ aiCad }) => {
   const activePhaseIndex = PHASES.findIndex((p) => p.id === phase);
 
   return (
-    <div className="flex flex-col h-full bg-surface select-text relative overflow-hidden">
+    <div
+      className={`flex flex-col h-full bg-surface select-text relative overflow-hidden transition-colors ${
+        isDragging ? 'ring-2 ring-cyan ring-inset bg-cyan/5' : ''
+      }`}
+      onDragOver={handleDragOver}
+      onDragLeave={handleDragLeave}
+      onDrop={handleDrop}
+      onPaste={handlePaste}
+    >
       {/* 1. API Key & Model Config Modal */}
       {showKeyModal && (
         <div className="absolute inset-0 z-50 bg-background/80 backdrop-blur-sm flex items-center justify-center p-4">
@@ -189,7 +294,7 @@ export const AIChatPanel: React.FC<AIChatPanelProps> = ({ aiCad }) => {
                   onChange={(e) => setTempModel(e.target.value)}
                   className="w-full px-3 py-2 text-xs bg-surface-subtle border border-surface-border rounded-xl text-white placeholder:text-slate-500 focus:outline-none focus:border-cyan font-mono"
                 />
-                <div className="flex flex-wrap gap-1 pt-1 max-h-24 overflow-y-auto no-scrollbar">
+                <div className="flex flex-wrap gap-1 pt-1 max-h-28 overflow-y-auto no-scrollbar">
                   {FREE_MODELS_PRESETS.map((m) => (
                     <button
                       key={m}
@@ -309,7 +414,7 @@ export const AIChatPanel: React.FC<AIChatPanelProps> = ({ aiCad }) => {
             </div>
             <h3 className="text-sm font-semibold text-white mb-1">Agentic CAD Designer</h3>
             <p className="text-xs text-slate-400 max-w-xs mb-4">
-              Describe what you want to create (e.g. <em>"Make a 3x3 macropad case"</em> or <em>"Custom mounting flange"</em>). The agent will remember context, generate step-by-step solids, and self-correct runtime errors.
+              Describe what you want to create or paste/upload reference drawings and sketches (PNG, JPEG, STEP, SVG).
             </p>
             <div className="flex flex-wrap justify-center gap-2">
               {['3x3 Macropad with Cherry MX switches', 'L-Bracket 60x40x10 with 4 holes', 'Filleted NEMA 17 motor mount'].map(
@@ -409,6 +514,28 @@ export const AIChatPanel: React.FC<AIChatPanelProps> = ({ aiCad }) => {
                   </div>
                 )}
 
+                {/* Attachments Display in User Bubble */}
+                {isUser && msg.attachments && msg.attachments.length > 0 && (
+                  <div className="mb-2 flex flex-wrap gap-2">
+                    {msg.attachments.map((att) => (
+                      <div key={att.id} className="relative rounded-lg overflow-hidden border border-white/20">
+                        {att.dataUrl ? (
+                          <img
+                            src={att.dataUrl}
+                            alt={att.name}
+                            className="w-24 h-24 object-cover rounded-lg bg-black/40"
+                          />
+                        ) : (
+                          <div className="flex items-center gap-1.5 px-2 py-1 bg-black/30 text-[10px] font-mono">
+                            <FileText className="w-3.5 h-3.5" />
+                            <span className="max-w-[100px] truncate">{att.name}</span>
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+
                 {/* Rich Markdown Body */}
                 <div className="markdown-content text-xs text-slate-200 leading-relaxed break-words">
                   <ReactMarkdown
@@ -492,7 +619,7 @@ export const AIChatPanel: React.FC<AIChatPanelProps> = ({ aiCad }) => {
               <span>STEP VERIFICATION REQUIRED</span>
             </div>
             <p className="text-xs text-slate-300">
-              The 3D solid for <strong className="text-white uppercase">{phase}</strong> has compiled successfully in your viewport. Inspect the geometry and choose an action:
+              The CAD solid has been compiled into your workspace IDE and rendered in the 3D viewport.
             </p>
 
             {isModifying ? (
@@ -534,7 +661,7 @@ export const AIChatPanel: React.FC<AIChatPanelProps> = ({ aiCad }) => {
                   className="flex-1 flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl bg-emerald hover:bg-emerald/90 text-white font-bold text-xs shadow-md shadow-emerald/20 transition-all"
                 >
                   <CheckCircle2 className="w-3.5 h-3.5" />
-                  <span>Yes (Proceed)</span>
+                  <span>Yes (Looks Great)</span>
                 </button>
                 <button
                   type="button"
@@ -591,24 +718,71 @@ export const AIChatPanel: React.FC<AIChatPanelProps> = ({ aiCad }) => {
         <div ref={messagesEndRef} />
       </div>
 
-      {/* 7. Bottom Input Bar */}
+      {/* 7. Bottom Input Bar with File/Image Attachment Tray */}
       <div className="p-3 bg-surface-subtle/80 border-t border-surface-border shrink-0">
+        {/* Hidden File Input */}
+        <input
+          ref={fileInputRef}
+          type="file"
+          multiple
+          accept="image/png,image/jpeg,image/webp,image/svg+xml,.step,.stp,.json,.js,.ts,.txt,.csv"
+          onChange={handleFileInputChange}
+          className="hidden"
+        />
+
+        {/* Pending Attachment Chips */}
+        {attachments.length > 0 && (
+          <div className="mb-2 flex flex-wrap gap-2 p-2 bg-surface rounded-xl border border-surface-border">
+            {attachments.map((att) => (
+              <div
+                key={att.id}
+                className="flex items-center gap-1.5 px-2 py-1 bg-surface-subtle border border-surface-border rounded-lg text-[10px] text-slate-200 font-mono"
+              >
+                {att.dataUrl ? (
+                  <img src={att.dataUrl} alt={att.name} className="w-5 h-5 rounded object-cover" />
+                ) : (
+                  <FileText className="w-3.5 h-3.5 text-cyan" />
+                )}
+                <span className="max-w-[120px] truncate">{att.name}</span>
+                <button
+                  type="button"
+                  onClick={() => handleRemoveAttachment(att.id)}
+                  className="p-0.5 hover:text-red-400 transition-colors ml-1"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+
         <form onSubmit={handleSend} className="flex items-center gap-2">
+          {/* Attach Button */}
+          <button
+            type="button"
+            onClick={() => fileInputRef.current?.click()}
+            title="Attach images (PNG, JPEG) or reference files (STEP, SVG, JSON, TXT)"
+            className="w-8 h-8 rounded-xl bg-surface hover:bg-surface-border border border-surface-border text-slate-400 hover:text-cyan flex items-center justify-center transition-colors shrink-0"
+          >
+            <Paperclip className="w-4 h-4" />
+          </button>
+
           <input
             type="text"
             placeholder={
-              phase === 'planning'
-                ? 'Describe your part, dimensions, or answers...'
-                : `Enter instructions or modifications for phase: ${phase}...`
+              attachments.length > 0
+                ? 'Add instructions for the attached file(s)...'
+                : 'Describe your part, paste an image (Ctrl+V), or type modifications...'
             }
             value={input}
             onChange={(e) => setInput(e.target.value)}
-            disabled={isLoading || needsVerification}
+            disabled={isLoading}
             className="flex-1 px-3.5 py-2 text-xs bg-surface border border-surface-border rounded-xl text-white placeholder:text-slate-500 focus:outline-none focus:border-cyan disabled:opacity-50 transition-colors"
           />
+
           <button
             type="submit"
-            disabled={!input.trim() || isLoading || needsVerification}
+            disabled={(!input.trim() && attachments.length === 0) || isLoading}
             className="w-8 h-8 rounded-xl bg-cyan hover:bg-cyan-hover text-black flex items-center justify-center shadow-md shadow-cyan/20 transition-all disabled:opacity-40 shrink-0"
           >
             <Send className="w-3.5 h-3.5" />

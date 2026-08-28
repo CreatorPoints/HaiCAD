@@ -35,6 +35,8 @@ export interface DesignParameters {
   [key: string]: any;
 }
 
+export type MessageRole = 'user' | 'assistant' | 'system' | 'ai-correction';
+
 export interface AiAttachment {
   id: string;
   name: string;

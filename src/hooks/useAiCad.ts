@@ -16,6 +16,7 @@ import {
   DesignParameters,
   AiCadMessage,
   AiCadConfig,
+  AiAttachment,
 } from '../types/aiCadTypes';
 import {
   OpenRouterService,
