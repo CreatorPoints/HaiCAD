@@ -3,7 +3,6 @@ import { HeaderNavbar } from './components/HeaderNavbar';
 import { CADViewport, CADViewportHandle, RenderMode } from './components/CADViewport';
 import { AIChatPanel, ChatMessage } from './components/chat/AIChatPanel';
 import { LeftSidebar, SidebarTab } from './components/sidebar/LeftSidebar';
-import { PRESETS, CADPreset } from './cad/presets';
 import { cadClient, WorkerMeshOutput } from './cad/cadClient';
 import {
   generateCADCode,
@@ -20,9 +19,45 @@ import {
 } from './services/aiService';
 import { ArrowRightLeft, CheckCircle2, AlertTriangle, X } from 'lucide-react';
 
+const DEFAULT_STARTER_CODE = `// HaiCAD Precision Parametric Solid
+const PARAMS = {
+  width: 40,
+  length: 40,
+  thickness: 4,
+  centerBore: 8,
+  mountingPCD: 28,
+  holeDia: 3.2,
+};
+
+function main({ makeBox, makeCylinder }) {
+  // Step 1: Base Plate Extrusion
+  // [PING: {"name": "Base Plate", "position": [0, 0, 2], "action": "Extruding flange"}]
+  const base = makeBox(PARAMS.width, PARAMS.length, PARAMS.thickness);
+
+  // Step 2: Center Bore Hole
+  // [PING: {"name": "Center Bore", "position": [0, 0, 0], "action": "Drilling through-hole"}]
+  const centerHole = makeCylinder(PARAMS.centerBore / 2, PARAMS.thickness + 4).translate([0, 0, -2]);
+
+  let solid = base.cut(centerHole);
+
+  // Step 3: Bolt Pitch Circle Pattern
+  const r = PARAMS.mountingPCD / 2;
+  const bolt = makeCylinder(PARAMS.holeDia / 2, PARAMS.thickness + 4).translate([0, 0, -2]);
+
+  const p1 = bolt.clone().translate([r, r, 0]);
+  const p2 = bolt.clone().translate([-r, r, 0]);
+  const p3 = bolt.clone().translate([-r, -r, 0]);
+  const p4 = bolt.clone().translate([r, -r, 0]);
+
+  solid = solid.cut(p1).cut(p2).cut(p3).cut(p4);
+
+  return solid;
+}
+`;
+
 export const App: React.FC = () => {
   // CAD Script & Geometry State
-  const [code, setCode] = useState<string>(PRESETS[0].code);
+  const [code, setCode] = useState<string>(DEFAULT_STARTER_CODE);
   const [meshes, setMeshes] = useState<WorkerMeshOutput[]>([]);
   const [isBuilding, setIsBuilding] = useState<boolean>(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -328,20 +363,6 @@ export const App: React.FC = () => {
     }
   };
 
-  const handleSelectPreset = (preset: CADPreset) => {
-    setCode(preset.code);
-    runCode(preset.code);
-    setMessages((prev) => [
-      ...prev,
-      {
-        id: 'sys_' + Date.now(),
-        sender: 'system',
-        content: `Loaded preset: "${preset.name}".`,
-        timestamp: Date.now(),
-      },
-    ]);
-  };
-
   const handleModelSelect = (modelId: string, modelObj?: AIModelOption) => {
     setSelectedModel(modelId);
     if (modelObj && !availableModels.some((m) => m.id === modelObj.id)) {
@@ -372,7 +393,7 @@ export const App: React.FC = () => {
 
       {/* Main Studio Workspace */}
       <div className="flex flex-1 w-full h-[calc(100vh-3.5rem)] relative overflow-hidden">
-        {/* Left Multi-Panel Sidebar (View Tools, IDE, Free Models Hub, BYOK Vault, Presets) */}
+        {/* Left Multi-Panel Sidebar (View Tools, IDE, BYOK Vault) */}
         <LeftSidebar
           activeTab={activeSidebarTab}
           onSelectTab={setActiveSidebarTab}
@@ -399,15 +420,10 @@ export const App: React.FC = () => {
           // BYOK props
           keyPool={keyPool}
           onUpdateKeyPool={handleUpdateKeyPool}
-          // Models props
-          selectedModel={selectedModel}
-          onSelectModel={handleModelSelect}
-          // Presets props
-          onSelectPreset={handleSelectPreset}
         />
 
         {/* Center 3D CAD Viewport */}
-        <main className="flex-1 h-full relative overflow-hidden">
+        <main className="flex-1 h-full relative overflow-hidden bg-[#090d16]">
           <CADViewport
             ref={viewportRef}
             meshes={meshes}
@@ -465,8 +481,6 @@ export const App: React.FC = () => {
           onSelectModel={handleModelSelect}
           availableModels={availableModels}
           onOpenBYOKTab={() => setActiveSidebarTab('byok')}
-          onOpenFreeModelsTab={() => setActiveSidebarTab('free_models')}
-          onSelectPreset={handleSelectPreset}
           onClearChat={handleClearChat}
           isOpen={isChatOpen}
           onToggleOpen={() => setIsChatOpen((prev) => !prev)}

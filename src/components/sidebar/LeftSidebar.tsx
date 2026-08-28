@@ -28,7 +28,7 @@ import { WorkerMeshOutput } from '../../cad/cadClient';
 import { APIKeyEntry, AIModelOption } from '../../services/aiService';
 import { PRESETS, CADPreset } from '../../cad/presets';
 
-export type SidebarTab = 'view_tools' | 'ide' | 'free_models' | 'byok' | 'presets';
+export type SidebarTab = 'view_tools' | 'ide' | 'byok';
 
 interface LeftSidebarProps {
   activeTab: SidebarTab | null;
@@ -56,11 +56,6 @@ interface LeftSidebarProps {
   // BYOK props
   keyPool: APIKeyEntry[];
   onUpdateKeyPool: (newPool: APIKeyEntry[]) => void;
-  // Models props
-  selectedModel: string;
-  onSelectModel: (modelId: string, modelObj?: AIModelOption) => void;
-  // Presets props
-  onSelectPreset: (preset: CADPreset) => void;
 }
 
 export const LeftSidebar: React.FC<LeftSidebarProps> = ({
@@ -86,9 +81,6 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({
   errorMessage,
   keyPool,
   onUpdateKeyPool,
-  selectedModel,
-  onSelectModel,
-  onSelectPreset,
 }) => {
   const [copied, setCopied] = React.useState(false);
 
@@ -109,17 +101,15 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({
     badge?: string | number;
     badgeColor?: string;
   }> = [
-    { id: 'view_tools', label: 'View Tools', icon: SlidersHorizontal },
+    { id: 'view_tools', label: 'View & Geometry Tools', icon: SlidersHorizontal },
     { id: 'ide', label: 'CAD Script IDE', icon: Code2 },
-    { id: 'free_models', label: 'Free AI Hub', icon: Sparkles, badge: 'Free', badgeColor: 'bg-cyan text-slate-950 font-bold' },
     {
       id: 'byok',
-      label: 'BYOK Vault',
+      label: 'BYOK Key Vault',
       icon: Key,
       badge: rateLimitedKeysCount > 0 ? `!` : activeKeysCount > 0 ? `${activeKeysCount}` : undefined,
       badgeColor: rateLimitedKeysCount > 0 ? 'bg-amber-500 text-slate-950 font-bold animate-pulse' : 'bg-primary/30 text-primary-glow',
     },
-    { id: 'presets', label: 'Preset Library', icon: FolderTree },
   ];
 
   return (
@@ -181,16 +171,12 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({
             <div className="flex items-center gap-2">
               {activeTab === 'view_tools' && <SlidersHorizontal className="w-4 h-4 text-cyan" />}
               {activeTab === 'ide' && <Code2 className="w-4 h-4 text-primary" />}
-              {activeTab === 'free_models' && <Sparkles className="w-4 h-4 text-cyan" />}
               {activeTab === 'byok' && <Key className="w-4 h-4 text-primary" />}
-              {activeTab === 'presets' && <FolderTree className="w-4 h-4 text-emerald" />}
 
               <h2 className="text-xs font-bold uppercase tracking-wider text-white">
                 {activeTab === 'view_tools' && '3D Viewport & Geometry Tools'}
                 {activeTab === 'ide' && 'Parametric CAD Script IDE'}
-                {activeTab === 'free_models' && 'Free AI Models & Catalog'}
                 {activeTab === 'byok' && 'BYOK Vault & Key Rotation'}
-                {activeTab === 'presets' && 'Parametric Presets Library'}
               </h2>
             </div>
 
@@ -216,9 +202,9 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({
             </div>
           </div>
 
-          {/* Drawer Body Content */}
-          <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
-            {/* VIEW TOOLS */}
+          {/* Drawer Body Contents */}
+          <div className="flex-1 flex flex-col overflow-hidden">
+            {/* VIEW TOOLS PANEL */}
             {activeTab === 'view_tools' && (
               <ViewToolsPanel
                 renderMode={renderMode}
@@ -237,68 +223,59 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({
               />
             )}
 
-            {/* IDE SCRIPT EDITOR */}
+            {/* MONACO CAD SCRIPT IDE */}
             {activeTab === 'ide' && (
-              <div className="flex-1 flex flex-col h-full overflow-hidden">
-                {/* Error Banner */}
-                {errorMessage && (
-                  <div className="px-3.5 py-2.5 bg-red-950/80 border-b border-red-500/30 flex items-start gap-2.5 text-red-200 text-xs shrink-0">
-                    <AlertCircle className="w-4 h-4 text-red-400 shrink-0 mt-0.5" />
-                    <div className="flex-1 overflow-x-auto font-mono text-[11px] leading-relaxed">
-                      {errorMessage}
-                    </div>
+              <div className="flex-1 flex flex-col overflow-hidden">
+                {/* Script Action Bar */}
+                <div className="px-4 py-2 bg-surface-subtle/80 border-b border-surface-border flex items-center justify-between shrink-0">
+                  <div className="flex items-center gap-2">
+                    <span className="text-[11px] font-mono text-slate-400">replicad script</span>
+                    <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-surface border border-surface-border text-slate-400">
+                      JavaScript (OpenCASCADE)
+                    </span>
                   </div>
-                )}
 
-                {/* Monaco Editor */}
-                <div className="flex-1 relative overflow-hidden">
+                  <button
+                    type="button"
+                    onClick={onRunCode}
+                    disabled={isBuilding}
+                    className="flex items-center gap-1.5 px-3 py-1 rounded-xl bg-primary hover:bg-primary-hover text-white text-xs font-semibold shadow-md shadow-primary/20 transition-all disabled:opacity-50"
+                  >
+                    <Play className="w-3 h-3 fill-current" />
+                    <span>{isBuilding ? 'Compiling...' : 'Run Code'}</span>
+                  </button>
+                </div>
+
+                {/* Monaco Editor Container */}
+                <div className="flex-1 w-full bg-[#1e1e1e] relative">
                   <Editor
                     height="100%"
-                    language="javascript"
+                    defaultLanguage="javascript"
                     theme="vs-dark"
                     value={code}
                     onChange={onChangeCode}
                     options={{
                       minimap: { enabled: false },
-                      fontSize: 12.5,
-                      fontFamily: "'JetBrains Mono', monospace",
+                      fontSize: 12,
+                      fontFamily: 'Fira Code, monospace',
                       lineNumbers: 'on',
                       scrollBeyondLastLine: false,
                       automaticLayout: true,
                       tabSize: 2,
-                      padding: { top: 12, bottom: 12 },
                       wordWrap: 'on',
+                      padding: { top: 12, bottom: 12 },
                     }}
                   />
                 </div>
 
-                {/* Bottom Run Bar */}
-                <div className="p-3 border-t border-surface-border bg-surface-subtle/30 flex items-center justify-between shrink-0">
-                  <span className="text-[11px] font-mono text-slate-400">
-                    Replicad JavaScript Kernel
-                  </span>
-                  <button
-                    type="button"
-                    onClick={onRunCode}
-                    disabled={isBuilding}
-                    className="flex items-center gap-1.5 px-4 py-1.5 rounded-xl bg-primary hover:bg-primary-hover text-white text-xs font-semibold shadow-md transition-all disabled:opacity-50"
-                  >
-                    <Play className="w-3.5 h-3.5 fill-current" />
-                    <span>{isBuilding ? 'Compiling...' : 'Run Script'}</span>
-                  </button>
-                </div>
+                {/* Compilation Error Footer */}
+                {errorMessage && (
+                  <div className="p-3 bg-red-950/80 border-t border-red-500/30 font-mono text-xs text-red-200 max-h-32 overflow-y-auto shrink-0 flex items-start gap-2">
+                    <AlertCircle className="w-4 h-4 text-red-400 shrink-0 mt-0.5" />
+                    <pre className="whitespace-pre-wrap flex-1">{errorMessage}</pre>
+                  </div>
+                )}
               </div>
-            )}
-
-            {/* FREE MODELS CATALOG */}
-            {activeTab === 'free_models' && (
-              <FreeModelsPanel
-                selectedModel={selectedModel}
-                onSelectModel={(modelId, modelObj) => {
-                  onSelectModel(modelId, modelObj);
-                }}
-                onOpenBYOKTab={() => onSelectTab('byok')}
-              />
             )}
 
             {/* BYOK VAULT & KEY POOL */}
@@ -306,50 +283,7 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({
               <BYOKPanel
                 keyPool={keyPool}
                 onUpdateKeyPool={onUpdateKeyPool}
-                activeModel={selectedModel}
-                onOpenFreeModelsTab={() => onSelectTab('free_models')}
               />
-            )}
-
-            {/* PRESETS LIBRARY */}
-            {activeTab === 'presets' && (
-              <div className="flex-1 flex flex-col overflow-y-auto p-4 space-y-3">
-                <div className="p-3 bg-surface-subtle/50 rounded-xl border border-surface-border flex items-start gap-2.5">
-                  <FolderTree className="w-4 h-4 text-emerald mt-0.5 shrink-0" />
-                  <p className="text-xs text-slate-300 leading-relaxed">
-                    Select a parametric CAD template to load into the workspace and customize.
-                  </p>
-                </div>
-
-                <div className="space-y-3">
-                  {PRESETS.map((preset) => (
-                    <div
-                      key={preset.id}
-                      onClick={() => onSelectPreset(preset)}
-                      className="group p-3.5 rounded-xl bg-surface-subtle/70 hover:bg-surface-subtle border border-surface-border hover:border-cyan/50 cursor-pointer transition-all flex flex-col justify-between shadow-sm"
-                    >
-                      <div>
-                        <div className="flex items-center justify-between mb-1.5">
-                          <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-cyan/10 text-cyan font-semibold">
-                            {preset.category}
-                          </span>
-                        </div>
-                        <h4 className="text-xs font-bold text-white group-hover:text-cyan transition-colors">
-                          {preset.name}
-                        </h4>
-                        <p className="text-xs text-slate-400 mt-1 line-clamp-2 leading-relaxed">
-                          {preset.description}
-                        </p>
-                      </div>
-
-                      <div className="mt-3 pt-2 border-t border-surface-border/50 flex items-center justify-between text-xs text-slate-400 group-hover:text-white">
-                        <span>Load Template</span>
-                        <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-1 transition-transform" />
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
             )}
           </div>
         </section>

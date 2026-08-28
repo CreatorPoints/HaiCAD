@@ -217,20 +217,26 @@ export const CADViewport = forwardRef<CADViewportHandle, CADViewportProps>(
 
       animate();
 
-      // Resize Handler
+      // Precision Resize Observer: handles sidebar/chat panel collapse & window resizing instantly
       const handleResize = () => {
-        if (!containerRef.current) return;
-        const w = containerRef.current.clientWidth;
-        const h = containerRef.current.clientHeight;
-        camera.aspect = w / h;
-        camera.updateProjectionMatrix();
-        renderer.setSize(w, h);
+        if (!containerRef.current || !cameraRef.current || !rendererRef.current) return;
+        const w = containerRef.current.clientWidth || 1;
+        const h = containerRef.current.clientHeight || 1;
+        cameraRef.current.aspect = w / h;
+        cameraRef.current.updateProjectionMatrix();
+        rendererRef.current.setSize(w, h, true);
       };
+
+      const resizeObserver = new ResizeObserver(() => {
+        handleResize();
+      });
+      resizeObserver.observe(container);
 
       window.addEventListener('resize', handleResize);
 
       return () => {
         cancelAnimationFrame(animationFrameId);
+        resizeObserver.disconnect();
         window.removeEventListener('resize', handleResize);
         renderer.dispose();
       };

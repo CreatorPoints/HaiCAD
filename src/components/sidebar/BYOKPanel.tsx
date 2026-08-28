@@ -24,14 +24,14 @@ import { APIKeyEntry, saveKeyPool, validateAPIKey } from '../../services/aiServi
 interface BYOKPanelProps {
   keyPool: APIKeyEntry[];
   onUpdateKeyPool: (newPool: APIKeyEntry[]) => void;
-  activeModel: string;
+  activeModel?: string;
   onOpenFreeModelsTab?: () => void;
 }
 
 export const BYOKPanel: React.FC<BYOKPanelProps> = ({
   keyPool,
   onUpdateKeyPool,
-  activeModel,
+  activeModel = 'auto-smart',
   onOpenFreeModelsTab,
 }) => {
   // New Key Form State

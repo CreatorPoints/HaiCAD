@@ -70,8 +70,6 @@ interface AIChatPanelProps {
   onSelectModel: (modelId: string, modelObj?: AIModelOption) => void;
   availableModels?: AIModelOption[];
   onOpenBYOKTab: () => void;
-  onOpenFreeModelsTab: () => void;
-  onSelectPreset?: (preset: CADPreset) => void;
   onClearChat: () => void;
   isOpen: boolean;
   onToggleOpen: () => void;
@@ -88,7 +86,6 @@ export const AIChatPanel: React.FC<AIChatPanelProps> = ({
   onSelectModel,
   availableModels = DEFAULT_MODELS,
   onOpenBYOKTab,
-  onOpenFreeModelsTab,
   onClearChat,
   isOpen,
   onToggleOpen,
@@ -249,17 +246,8 @@ export const AIChatPanel: React.FC<AIChatPanelProps> = ({
           {showModelPicker && (
             <div className="absolute top-full left-0 mt-1.5 w-full rounded-xl bg-surface border border-surface-border shadow-2xl p-1.5 z-50 backdrop-blur-xl animate-in fade-in zoom-in-95">
               <div className="flex items-center justify-between px-2 py-1 text-[10px] font-mono uppercase tracking-wider text-slate-400 border-b border-surface-border/50 mb-1">
-                <span>Model Selector</span>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setShowModelPicker(false);
-                    onOpenFreeModelsTab();
-                  }}
-                  className="text-cyan-glow hover:underline text-[10px] font-sans"
-                >
-                  Browse Hub
-                </button>
+                <span>Free Tier Models</span>
+                <span className="text-emerald text-[9px] font-bold">100% Free</span>
               </div>
 
               <div className="max-h-60 overflow-y-auto space-y-1">

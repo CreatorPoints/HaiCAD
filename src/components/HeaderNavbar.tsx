@@ -86,28 +86,15 @@ export const HeaderNavbar: React.FC<HeaderNavbarProps> = ({
 
           <button
             type="button"
-            onClick={() => onOpenTab('free_models')}
+            onClick={() => onOpenTab('byok')}
             className={`flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-xs font-medium transition-all ${
-              activeTab === 'free_models'
-                ? 'bg-cyan/20 text-cyan border border-cyan/40'
+              activeTab === 'byok'
+                ? 'bg-primary/20 text-primary-glow border border-primary/40'
                 : 'text-slate-300 hover:text-white hover:bg-surface-subtle border border-transparent'
             }`}
           >
-            <Sparkles className="w-3.5 h-3.5 text-cyan" />
-            <span>Free AI Hub</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => onOpenTab('presets')}
-            className={`flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-xs font-medium transition-all ${
-              activeTab === 'presets'
-                ? 'bg-emerald/20 text-emerald border border-emerald/40'
-                : 'text-slate-300 hover:text-white hover:bg-surface-subtle border border-transparent'
-            }`}
-          >
-            <Layers className="w-3.5 h-3.5 text-emerald" />
-            <span>Presets</span>
+            <Key className="w-3.5 h-3.5 text-primary" />
+            <span>BYOK Vault</span>
           </button>
         </div>
       </div>
