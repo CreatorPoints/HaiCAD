@@ -43,39 +43,94 @@ export interface ModelCapabilityProfile {
  * Zero-quota / preview endpoints (like gemini-3.1-pro with limit:0) are strictly excluded.
  */
 export const MODEL_CAPABILITY_PROFILES: ModelCapabilityProfile[] = [
-  // --- Google Gemini High-Quota Free Tier Models ---
+  // --- Google Gemini Verified Free Tier Models (15 RPM / 1,500 RPD) ---
   {
-    id: 'gemini-2.5-flash',
-    name: 'Gemini 2.5 Flash (Free Tier)',
+    id: 'gemini-3.7-flash',
+    name: 'Gemini 3.7 Flash (Hybrid Free Tier)',
     provider: 'gemini',
     isFree: true,
     isReasoningSpecialist: true,
     isCodeSpecialist: true,
     speedScore: 10,
-    priorityRank: 1, // Primary Google workhorse: 15 RPM / 1M TPM / 1500 RPD free quota
+    priorityRank: 1, // Best overall: complex CSG booleans, math, and code
     allowedModes: ['CODE_IMPLEMENTATION', 'REASONING', 'KERNEL_REPAIR', 'QUESTION_EXPLANATION'],
   },
   {
     id: 'gemini-3.6-flash',
-    name: 'Gemini 3.6 Flash (Free Tier)',
+    name: 'Gemini 3.6 Flash (Next-Gen Free Tier)',
+    provider: 'gemini',
+    isFree: true,
+    isReasoningSpecialist: true,
+    isCodeSpecialist: true,
+    speedScore: 9.8,
+    priorityRank: 2, // Low-latency script generation & instant edits
+    allowedModes: ['CODE_IMPLEMENTATION', 'REASONING', 'QUESTION_EXPLANATION'],
+  },
+  {
+    id: 'gemini-3.5-flash',
+    name: 'Gemini 3.5 Flash (Workhorse Free Tier)',
     provider: 'gemini',
     isFree: true,
     isReasoningSpecialist: true,
     isCodeSpecialist: true,
     speedScore: 9.5,
-    priorityRank: 2,
-    allowedModes: ['CODE_IMPLEMENTATION', 'REASONING', 'QUESTION_EXPLANATION'],
+    priorityRank: 3, // Reliable fallback code execution
+    allowedModes: ['CODE_IMPLEMENTATION', 'REASONING', 'KERNEL_REPAIR'],
   },
   {
-    id: 'gemini-2.5-flash-lite',
-    name: 'Gemini 2.5 Flash-Lite (Free Tier)',
+    id: 'gemini-3.5-flash-lite',
+    name: 'Gemini 3.5 Flash-Lite (Ultra-Fast Free Tier)',
     provider: 'gemini',
     isFree: true,
     isReasoningSpecialist: false,
     isCodeSpecialist: true,
-    speedScore: 9.8,
-    priorityRank: 3,
+    speedScore: 9.9,
+    priorityRank: 4, // Fast parameter changes & primitive drafting
     allowedModes: ['CODE_IMPLEMENTATION', 'QUESTION_EXPLANATION'],
+  },
+  {
+    id: 'gemini-3.1-flash-lite',
+    name: 'Gemini 3.1 Flash-Lite (High-Throughput Free Tier)',
+    provider: 'gemini',
+    isFree: true,
+    isReasoningSpecialist: false,
+    isCodeSpecialist: true,
+    speedScore: 9.9,
+    priorityRank: 5, // Quick geometry edits & background agent routing
+    allowedModes: ['CODE_IMPLEMENTATION'],
+  },
+  {
+    id: 'gemini-2.5-flash',
+    name: 'Gemini 2.5 Flash (Stable Free Tier)',
+    provider: 'gemini',
+    isFree: true,
+    isReasoningSpecialist: true,
+    isCodeSpecialist: true,
+    speedScore: 9.0,
+    priorityRank: 6, // Stable fallback generation
+    allowedModes: ['CODE_IMPLEMENTATION', 'REASONING', 'QUESTION_EXPLANATION'],
+  },
+  {
+    id: 'gemini-2.5-flash-lite',
+    name: 'Gemini 2.5 Flash-Lite (Low-Latency Free Tier)',
+    provider: 'gemini',
+    isFree: true,
+    isReasoningSpecialist: false,
+    isCodeSpecialist: true,
+    speedScore: 9.5,
+    priorityRank: 7, // Fast token output with minimal overhead
+    allowedModes: ['CODE_IMPLEMENTATION'],
+  },
+  {
+    id: 'gemma-4-31b-it',
+    name: 'Gemma 4 31B (Google Open Weights Free Tier)',
+    provider: 'gemini',
+    isFree: true,
+    isReasoningSpecialist: true,
+    isCodeSpecialist: true,
+    speedScore: 8.5,
+    priorityRank: 8, // Open-weights mathematical & constraint reasoning
+    allowedModes: ['REASONING', 'CODE_IMPLEMENTATION', 'QUESTION_EXPLANATION'],
   },
 
   // --- OpenRouter 100% Free Reasoning Specialists (:free) ---
@@ -87,7 +142,7 @@ export const MODEL_CAPABILITY_PROFILES: ModelCapabilityProfile[] = [
     isReasoningSpecialist: true,
     isCodeSpecialist: false,
     speedScore: 8.5,
-    priorityRank: 4,
+    priorityRank: 9,
     allowedModes: ['REASONING', 'KERNEL_REPAIR'],
   },
 
@@ -100,7 +155,7 @@ export const MODEL_CAPABILITY_PROFILES: ModelCapabilityProfile[] = [
     isReasoningSpecialist: false,
     isCodeSpecialist: true,
     speedScore: 9.5,
-    priorityRank: 5,
+    priorityRank: 10,
     allowedModes: ['CODE_IMPLEMENTATION', 'KERNEL_REPAIR'],
   },
   {
@@ -111,7 +166,7 @@ export const MODEL_CAPABILITY_PROFILES: ModelCapabilityProfile[] = [
     isReasoningSpecialist: false,
     isCodeSpecialist: true,
     speedScore: 8.0,
-    priorityRank: 6,
+    priorityRank: 11,
     allowedModes: ['CODE_IMPLEMENTATION', 'QUESTION_EXPLANATION'],
   },
   {
@@ -122,7 +177,7 @@ export const MODEL_CAPABILITY_PROFILES: ModelCapabilityProfile[] = [
     isReasoningSpecialist: true,
     isCodeSpecialist: false,
     speedScore: 8.0,
-    priorityRank: 7,
+    priorityRank: 12,
     allowedModes: ['REASONING'],
   },
   {
@@ -133,7 +188,7 @@ export const MODEL_CAPABILITY_PROFILES: ModelCapabilityProfile[] = [
     isReasoningSpecialist: false,
     isCodeSpecialist: true,
     speedScore: 8.0,
-    priorityRank: 8,
+    priorityRank: 13,
     allowedModes: ['CODE_IMPLEMENTATION', 'QUESTION_EXPLANATION'],
   },
 ];

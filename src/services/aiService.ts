@@ -63,51 +63,82 @@ export const DEFAULT_MODELS: AIModelOption[] = [
     description: 'Intelligently routes every task to the optimal 100% free reasoning or code specialist model.',
   },
   {
-    id: 'gemini-2.5-flash',
-    name: 'Gemini 2.5 Flash (Free Tier)',
+    id: 'gemini-3.7-flash',
+    name: 'Gemini 3.7 Flash (Hybrid Free Tier)',
     provider: 'gemini',
-    badge: 'Free Code',
+    badge: 'Best Overall',
     recommended: true,
-    isCodeSuited: true,
-    isFree: true,
-    description: 'Google workhorse model for high-speed CAD code generation (Google AI Studio Free Quota).',
-  },
-  {
-    id: 'gemini-3.1-pro-preview',
-    name: 'Gemini 3.1 Pro (Free Tier)',
-    provider: 'gemini',
-    badge: 'Free Reasoning',
     isCodeSuited: true,
     isReasoning: true,
     isFree: true,
-    description: 'Google reasoning champion for complex geometric constraints and math (Google AI Studio Free Quota).',
+    description: 'Top-tier hybrid reasoning & code model for complex CSG booleans and step-by-step CAD math (~15 RPM / 1,500 RPD).',
   },
   {
     id: 'gemini-3.6-flash',
-    name: 'Gemini 3.6 Flash (Free Tier)',
+    name: 'Gemini 3.6 Flash (Next-Gen Free Tier)',
     provider: 'gemini',
     badge: 'Free Ultra Fast',
     isCodeSuited: true,
+    isReasoning: true,
     isFree: true,
-    description: 'Next-gen Google Flash model with high token generation speeds (Google AI Studio Free Quota).',
+    description: 'Low-latency script generation and instant parametric edits (~15 RPM / 1,500 RPD).',
   },
   {
-    id: 'gemini-2.5-flash-lite',
-    name: 'Gemini 2.5 Flash-Lite (Free Tier)',
+    id: 'gemini-3.5-flash',
+    name: 'Gemini 3.5 Flash (Workhorse Free Tier)',
+    provider: 'gemini',
+    badge: 'Free Workhorse',
+    isCodeSuited: true,
+    isReasoning: true,
+    isFree: true,
+    description: 'Reliable fallback code execution and boolean solid modeling (~15 RPM / 1,500 RPD).',
+  },
+  {
+    id: 'gemini-3.5-flash-lite',
+    name: 'Gemini 3.5 Flash-Lite (Ultra-Fast Free Tier)',
     provider: 'gemini',
     badge: 'Free Lite',
     isCodeSuited: true,
     isFree: true,
-    description: 'Lightweight, low-latency Google model for quick parametric changes (Google AI Studio Free Quota).',
+    description: 'Ultra-fast lightweight model for parameter modifications & primitive drafting (~15 RPM / 1,500 RPD).',
+  },
+  {
+    id: 'gemini-3.1-flash-lite',
+    name: 'Gemini 3.1 Flash-Lite (High-Throughput Free Tier)',
+    provider: 'gemini',
+    badge: 'High Speed',
+    isCodeSuited: true,
+    isFree: true,
+    description: 'High-throughput subagent model for quick geometry edits (~15 RPM / 1,500 RPD).',
+  },
+  {
+    id: 'gemini-2.5-flash',
+    name: 'Gemini 2.5 Flash (Stable Free Tier)',
+    provider: 'gemini',
+    badge: 'Free Code',
+    isCodeSuited: true,
+    isReasoning: true,
+    isFree: true,
+    description: 'Stable legacy Flash model for general-purpose fallback generation.',
+  },
+  {
+    id: 'gemini-2.5-flash-lite',
+    name: 'Gemini 2.5 Flash-Lite (Low-Latency Free Tier)',
+    provider: 'gemini',
+    badge: 'Free Lite',
+    isCodeSuited: true,
+    isFree: true,
+    description: 'Low-latency legacy model with fast token output.',
   },
   {
     id: 'gemma-4-31b-it',
-    name: 'Gemma 4 31B (Google Free Tier)',
+    name: 'Gemma 4 31B (Google Open Weights Free Tier)',
     provider: 'gemini',
     badge: 'Free Gemma',
     isCodeSuited: true,
+    isReasoning: true,
     isFree: true,
-    description: 'High-parameter Google open weights instruction model.',
+    description: 'Google open-weights model for mathematical & constraint reasoning (~15 RPM / 1,500 RPD).',
   },
   {
     id: 'nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free',
@@ -555,22 +586,27 @@ export async function generateCADCode(params: GenerateCADParams): Promise<Genera
           }),
         });
 
-        // If preview model was not found (404) or hit limit:0 / rate limit (429), auto-fallback to gemini-2.5-flash
-        if (!res.ok && modelToCall !== 'gemini-2.5-flash') {
-          onStepProgress?.(`Auto-switching to high-throughput Gemini 2.5 Flash Free Tier...`);
-          modelToCall = 'gemini-2.5-flash';
-          apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${modelToCall}:generateContent?key=${candidateKey.key.trim()}`;
-          res = await fetch(apiUrl, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              contents: [{ role: 'user', parts: [{ text: `${fullSystemPrompt}\n\n${userContent}` }] }],
-              generationConfig: {
-                temperature: 0.2,
-                maxOutputTokens: 4096,
-              },
-            }),
-          });
+        // If model hit limit:0, rate limit (429), or error, auto-cascade through verified working free tier flash endpoints
+        if (!res.ok) {
+          const fallbackModels = ['gemini-3.7-flash', 'gemini-3.6-flash', 'gemini-3.5-flash', 'gemini-2.5-flash'];
+          for (const fallbackModel of fallbackModels) {
+            if (fallbackModel === modelToCall) continue;
+            onStepProgress?.(`Auto-fallback to ${fallbackModel} (Free Tier)...`);
+            modelToCall = fallbackModel;
+            apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${modelToCall}:generateContent?key=${candidateKey.key.trim()}`;
+            res = await fetch(apiUrl, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                contents: [{ role: 'user', parts: [{ text: `${fullSystemPrompt}\n\n${userContent}` }] }],
+                generationConfig: {
+                  temperature: 0.2,
+                  maxOutputTokens: 4096,
+                },
+              }),
+            });
+            if (res.ok) break;
+          }
         }
 
         if (!res.ok) {
