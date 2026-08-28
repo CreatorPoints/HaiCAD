@@ -274,21 +274,25 @@ export const FreeModelsPanel: React.FC<FreeModelsPanelProps> = ({
                     </button>
                   </div>
 
-                  <div className="grid grid-cols-3 gap-2 text-[10px] font-mono text-slate-400 bg-surface/50 p-2 rounded-lg mb-2">
-                    <div>
-                      Coding: <span className="text-primary-glow font-bold">{p.codingScore}/10</span>
-                    </div>
-                    <div>
-                      Reasoning: <span className="text-purple-300 font-bold">{p.reasoningScore}/10</span>
-                    </div>
-                    <div>
-                      Speed: <span className="text-emerald font-bold">{p.speedScore}/10</span>
-                    </div>
+                  <div className="flex items-center gap-1.5 flex-wrap mb-2">
+                    {p.isReasoningSpecialist && (
+                      <span className="text-[9px] font-mono px-2 py-0.5 rounded bg-purple-500/20 text-purple-300 font-bold border border-purple-500/30">
+                        REASONING ONLY
+                      </span>
+                    )}
+                    {p.isCodeSpecialist && (
+                      <span className="text-[9px] font-mono px-2 py-0.5 rounded bg-primary/20 text-primary-glow font-bold border border-primary/30">
+                        CODE SPECIALIST
+                      </span>
+                    )}
+                    <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-surface border border-surface-border text-slate-300">
+                      Speed: {p.speedScore}/10
+                    </span>
                   </div>
 
-                  <div className="text-[10px] text-slate-400">
-                    <span className="font-semibold text-slate-300">Optimal for: </span>
-                    {p.recommendedFor.map((r) => r.replace('_', ' ')).join(', ')}
+                  <div className="text-[10px] text-slate-400 font-mono">
+                    <span className="font-semibold text-slate-300">Task Modes: </span>
+                    {p.allowedModes.map((m) => m.replace('_', ' ')).join(', ')}
                   </div>
                 </div>
               );

@@ -53,8 +53,14 @@ export const DynamicIsland: React.FC<DynamicIslandProps> = ({
     DEFAULT_MODELS.find((m) => m.id === selectedModel) ||
     DEFAULT_MODELS[0];
 
-  const provider = activeModelObj.provider;
-  const hasActiveKeyForProvider = keyPool.some((k) => k.provider === provider && k.isActive);
+  const isAutoRouting = selectedModel === 'auto-smart' || selectedModel === 'auto';
+  const hasGeminiKey = keyPool.some((k) => k.provider === 'gemini' && k.isActive);
+  const hasOpenRouterKey = keyPool.some((k) => k.provider === 'openrouter' && k.isActive);
+  const hasAnyActiveKey = hasGeminiKey || hasOpenRouterKey;
+
+  const hasActiveKeyForProvider = isAutoRouting
+    ? hasAnyActiveKey
+    : keyPool.some((k) => k.provider === activeModelObj.provider && k.isActive);
 
   const handleSubmit = (e?: React.FormEvent) => {
     if (e) e.preventDefault();
@@ -88,8 +94,32 @@ export const DynamicIsland: React.FC<DynamicIslandProps> = ({
     'Add circular 6-bolt pattern',
   ];
 
+  // Derive smart placeholder text
+  let placeholderText = 'Describe your CAD part or change (e.g., "Add 4 M4 screw holes on corners")...';
+  if (isGenerating) {
+    placeholderText = 'HaiCAD is generating your 3D model...';
+  } else if (!hasActiveKeyForProvider) {
+    if (isAutoRouting) {
+      placeholderText = 'Click to add an OpenRouter or Gemini API Key in BYOK...';
+    } else {
+      placeholderText = `Click to configure ${activeModelObj.provider === 'gemini' ? 'Gemini' : 'OpenRouter'} key in BYOK...`;
+    }
+  }
+
+  // Derive status badge text
+  let statusBadgeText = 'Add Key';
+  if (hasActiveKeyForProvider) {
+    if (isAutoRouting) {
+      if (hasGeminiKey && hasOpenRouterKey) statusBadgeText = 'Dual BYOK Ready';
+      else if (hasOpenRouterKey) statusBadgeText = 'OpenRouter BYOK Ready';
+      else statusBadgeText = 'Gemini BYOK Ready';
+    } else {
+      statusBadgeText = `${activeModelObj.provider === 'gemini' ? 'Gemini' : 'OpenRouter'} Ready`;
+    }
+  }
+
   return (
-    <div className="absolute bottom-6 left-1/2 -translate-x-1/2 w-full max-w-2xl px-4 z-30 pointer-events-auto">
+    <div className="absolute bottom-6 left-1/2 -translate-x-1/2 w-full max-w-2xl px-4 z-30 pointer-events-auto select-none">
       {/* Floating Dynamic Island Container */}
       <div
         className={`relative w-full rounded-2xl bg-surface/90 border transition-all duration-300 backdrop-blur-xl shadow-island ${
@@ -137,7 +167,7 @@ export const DynamicIsland: React.FC<DynamicIslandProps> = ({
               className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-surface-subtle border border-surface-border text-xs font-medium text-slate-200 hover:text-white hover:bg-slate-800 transition-all shrink-0"
             >
               <Cpu className="w-3.5 h-3.5 text-primary-glow" />
-              <span className="max-w-[120px] truncate">{activeModelObj.name}</span>
+              <span className="max-w-[130px] truncate">{activeModelObj.name}</span>
               <ChevronDown className="w-3 h-3 text-slate-400" />
             </button>
 
@@ -145,7 +175,7 @@ export const DynamicIsland: React.FC<DynamicIslandProps> = ({
             {showModelPicker && (
               <div className="absolute bottom-full left-0 mb-2 w-72 rounded-xl bg-surface border border-surface-border shadow-2xl p-1.5 z-50 backdrop-blur-xl animate-in fade-in slide-in-from-bottom-2">
                 <div className="flex items-center justify-between px-2 py-1 text-[10px] font-mono uppercase tracking-wider text-slate-400 border-b border-surface-border/50 mb-1">
-                  <span>Procedural Model Selector</span>
+                  <span>Model Selector</span>
                   {onOpenFreeModelsTab && (
                     <button
                       type="button"
@@ -155,14 +185,14 @@ export const DynamicIsland: React.FC<DynamicIslandProps> = ({
                       }}
                       className="text-cyan-glow hover:underline text-[10px] font-sans font-normal"
                     >
-                      Browse All Hub
+                      Browse Hub
                     </button>
                   )}
                 </div>
 
                 <div className="max-h-64 overflow-y-auto space-y-1">
                   {availableModels.map((m) => {
-                    const isFree = m.isFree || m.id.endsWith(':free');
+                    const isFree = m.isFree || m.id.endsWith(':free') || m.id.startsWith('gemini-');
                     const isSelected = m.id === selectedModel;
                     return (
                       <button
@@ -188,7 +218,11 @@ export const DynamicIsland: React.FC<DynamicIslandProps> = ({
                             )}
                           </div>
                           <span className="text-[9px] font-mono text-slate-400">
-                            {m.provider === 'gemini' ? 'Google' : 'OpenRouter'}
+                            {m.id === 'auto-smart'
+                              ? 'Autonomous Router'
+                              : m.provider === 'gemini'
+                              ? 'Google Gemini'
+                              : 'OpenRouter'}
                           </span>
                         </div>
 
@@ -233,13 +267,7 @@ export const DynamicIsland: React.FC<DynamicIslandProps> = ({
               onChange={(e) => setPrompt(e.target.value)}
               onKeyDown={handleKeyDown}
               disabled={isGenerating}
-              placeholder={
-                isGenerating
-                  ? 'HaiCAD is generating your 3D model...'
-                  : !hasActiveKeyForProvider
-                  ? `Click to configure ${activeModelObj.provider === 'gemini' ? 'Gemini' : 'OpenRouter'} key in BYOK...`
-                  : 'Describe your CAD part or change (e.g., "Add 4 M4 screw holes on corners")...'
-              }
+              placeholder={placeholderText}
               className="w-full bg-transparent px-3 py-2 text-sm text-slate-100 placeholder-slate-500 focus:outline-none disabled:opacity-50"
             />
           </div>
@@ -294,7 +322,7 @@ export const DynamicIsland: React.FC<DynamicIslandProps> = ({
                 }`}
                 title={hasActiveKeyForProvider ? 'Click to manage BYOK Key Pool' : 'No active key! Click to add in BYOK'}
               >
-                {hasActiveKeyForProvider ? `BYOK Ready` : `Add Key`}
+                {statusBadgeText}
               </span>
             </div>
           </div>
