@@ -6,10 +6,10 @@
  * 2. Conversational Planning & Vague Intent Clarification
  * 3. Step-by-step modular Replicad code generation
  * 4. Self-Correction Loop with up to 3 automated retries upon Web Worker compilation/geometry failure
- * 5. OpenRouter API integration with free-tier model support
+ * 5. OpenRouter API integration with autonomous model cycling / fallback
  */
 
-import { useState, useCallback, useRef, useEffect } from 'react';
+import { useState, useCallback, useRef } from 'react';
 import {
   CadPhase,
   VerificationAction,
@@ -130,6 +130,18 @@ export function useAiCad(config: AiCadConfig = {}) {
     return newMessage;
   }, []);
 
+  // Fallback model cycling notification handler
+  const handleModelCycle = useCallback(
+    (failedModel: string, nextModel: string, reason: string) => {
+      setModelState(nextModel);
+      addMessage({
+        role: 'ai-correction',
+        content: `🔄 Model \`${failedModel.split('/')[1] || failedModel}\` unavailable (${reason}). Automatically cycling to \`${nextModel.split('/')[1] || nextModel}\`...`,
+      });
+    },
+    [addMessage]
+  );
+
   /**
    * Evaluates code in CAD Web Worker with error capture
    */
@@ -153,7 +165,7 @@ export function useAiCad(config: AiCadConfig = {}) {
   }, []);
 
   /**
-   * Core Step-by-Step Code Generator with 3-Attempt Self-Correction Loop
+   * Core Step-by-Step Code Generator with 3-Attempt Self-Correction Loop & Model Cycling
    */
   const generateAndVerifyPhaseCode = useCallback(
     async (
@@ -177,16 +189,17 @@ export function useAiCad(config: AiCadConfig = {}) {
           userFeedback
         );
 
-        // 2. Call OpenRouter API
-        const rawAiOutput = await OpenRouterService.createChatCompletion(
+        // 2. Call OpenRouter API with automated model cycling
+        const completionRes = await OpenRouterService.createChatCompletionWithFallback(
           [
             { role: 'system', content: REPLICAD_SYSTEM_CONTEXT },
             { role: 'user', content: promptContent },
           ],
-          { apiKey, model }
+          { apiKey, model },
+          handleModelCycle
         );
 
-        let candidateCode = extractCodeBlock(rawAiOutput);
+        let candidateCode = extractCodeBlock(completionRes.content);
 
         // 3. Self-Correction Loop (Try/Catch Web Worker Execution)
         let attempt = 0;
@@ -233,7 +246,7 @@ export function useAiCad(config: AiCadConfig = {}) {
           });
 
           if (attempt < MAX_AUTO_RETRIES) {
-            // Ask AI to correct the code
+            // Ask AI to correct the code (with fallback cycling)
             const correctionPrompt = buildSelfCorrectionPrompt({
               error: lastErrorMsg,
               originalPrompt: stepPrompt,
@@ -242,15 +255,16 @@ export function useAiCad(config: AiCadConfig = {}) {
               attempt,
             });
 
-            const correctedOutput = await OpenRouterService.createChatCompletion(
+            const correctedRes = await OpenRouterService.createChatCompletionWithFallback(
               [
                 { role: 'system', content: REPLICAD_SYSTEM_CONTEXT },
                 { role: 'user', content: correctionPrompt },
               ],
-              { apiKey, model }
+              { apiKey, model },
+              handleModelCycle
             );
 
-            candidateCode = extractCodeBlock(correctedOutput);
+            candidateCode = extractCodeBlock(correctedRes.content);
           }
         }
 
@@ -297,7 +311,7 @@ export function useAiCad(config: AiCadConfig = {}) {
         setIsLoading(false);
       }
     },
-    [apiKey, model, designParams, evaluateInWorker, addMessage]
+    [apiKey, model, designParams, evaluateInWorker, addMessage, handleModelCycle]
   );
 
   /**
@@ -343,14 +357,17 @@ export function useAiCad(config: AiCadConfig = {}) {
               content: m.content,
             }));
 
-          const response = await OpenRouterService.createChatCompletion(
+          const responseRes = await OpenRouterService.createChatCompletionWithFallback(
             [
               { role: 'system', content: PLANNING_SYSTEM_PROMPT },
               ...planningHistory,
               { role: 'user', content: trimmed },
             ],
-            { apiKey, model }
+            { apiKey, model },
+            handleModelCycle
           );
+
+          const response = responseRes.content;
 
           // Extract any structured parameters from the response
           const jsonMeta = extractJsonBlock<{
@@ -420,6 +437,7 @@ export function useAiCad(config: AiCadConfig = {}) {
       model,
       addMessage,
       generateAndVerifyPhaseCode,
+      handleModelCycle,
     ]
   );
 

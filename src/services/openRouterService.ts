@@ -1,5 +1,6 @@
 /**
  * OpenRouter API Client Service for HaiCAD
+ * Implements autonomous multi-model fallback & cycling
  */
 
 export interface OpenRouterMessage {
@@ -14,9 +15,28 @@ export interface OpenRouterCompletionOptions {
   maxTokens?: number;
 }
 
+export type ModelCycleCallback = (
+  failedModel: string,
+  nextModel: string,
+  errorReason: string
+) => void;
+
 export const FREE_MODELS_PRESETS = [
   'inclusionai/ling-3.0-flash-fin:free',
   'dots-studio/dots-3-note-preview:free',
+  'thinkingmachines/inkling:free',
+  'thinkingmachines/inkling-small:free',
+  'poolside/laguna-s-2.1:free',
+  'poolside/laguna-xs-2.1:free',
+  'cohere/north-mini-code:free',
+  'z-ai/glm-5.2:free',
+  'google/gemma-4-31b-it:free',
+  'nvidia/nemotron-3-ultra-550b-a55b:free',
+  'nvidia/nemotron-3-super-120b-a12b:free',
+  'minimax/minimax-m3:free',
+  'minimax/minimax-m2.7:free',
+  'liquid/lfm-2.5-2.6b:free',
+  'nvidia/nemotron-3.5-lightning:free',
   'meta-llama/llama-3.3-70b-instruct:free',
   'mistralai/mistral-7b-instruct:free',
   'qwen/qwen-2.5-coder-32b-instruct:free',
@@ -39,7 +59,7 @@ export function setStoredOpenRouterKey(key: string): void {
 export function getStoredOpenRouterModel(): string {
   if (typeof window === 'undefined') return DEFAULT_OPENROUTER_MODEL;
   const stored = localStorage.getItem(STORAGE_KEY_MODEL);
-  if (!stored || stored.includes('gemma') || stored === 'openrouter/free') {
+  if (!stored || stored.includes('gemma-2') || stored === 'openrouter/free') {
     return DEFAULT_OPENROUTER_MODEL;
   }
   return stored;
@@ -54,7 +74,7 @@ export class OpenRouterService {
   private static BASE_URL = 'https://openrouter.ai/api/v1/chat/completions';
 
   /**
-   * Request chat completion from OpenRouter API
+   * Request chat completion from a single specific model
    */
   static async createChatCompletion(
     messages: OpenRouterMessage[],
@@ -111,9 +131,57 @@ export class OpenRouterService {
     const output = data.choices?.[0]?.message?.content;
 
     if (!output && output !== '') {
-      throw new Error('Received empty response from OpenRouter API.');
+      throw new Error(`Received empty response from model ${model}.`);
     }
 
     return output.trim();
+  }
+
+  /**
+   * Request chat completion with automated fallback / cycling across models
+   */
+  static async createChatCompletionWithFallback(
+    messages: OpenRouterMessage[],
+    options: OpenRouterCompletionOptions = {},
+    onModelCycle?: ModelCycleCallback
+  ): Promise<{ content: string; usedModel: string }> {
+    const initialModel = options.model || getStoredOpenRouterModel() || DEFAULT_OPENROUTER_MODEL;
+
+    // Create an ordered queue starting with initialModel, then other presets
+    const fallbackQueue: string[] = [
+      initialModel,
+      ...FREE_MODELS_PRESETS.filter((m) => m !== initialModel),
+    ];
+
+    let lastError: Error | null = null;
+
+    for (let i = 0; i < fallbackQueue.length; i++) {
+      const candidateModel = fallbackQueue[i];
+      try {
+        const content = await this.createChatCompletion(messages, {
+          ...options,
+          model: candidateModel,
+        });
+
+        // If succeeded on a fallback model, update stored preference
+        if (candidateModel !== initialModel) {
+          setStoredOpenRouterModel(candidateModel);
+        }
+
+        return { content, usedModel: candidateModel };
+      } catch (err: any) {
+        lastError = err;
+        const nextModel = fallbackQueue[i + 1];
+
+        if (nextModel && onModelCycle) {
+          onModelCycle(candidateModel, nextModel, err?.message || String(err));
+        }
+      }
+    }
+
+    throw (
+      lastError ||
+      new Error('All available AI models in the fallback queue failed to respond.')
+    );
   }
 }
