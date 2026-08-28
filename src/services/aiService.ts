@@ -229,22 +229,29 @@ Your job is to generate clean, robust, and executable JavaScript code using the 
 4. Fillets and Chamfers:
    - shape.fillet(radius, (edge) => edge.inDirection("Z"))
    - shape.chamfer(dist, (edge) => edge.inDirection("X"))
+   - Always ensure fillet radius is strictly smaller than the wall/feature thickness.
 
-5. Output Format Requirement:
-   - Always return valid JavaScript.
-   - You MUST export or define a \`function main({ draw, sketch, drawRoundedRectangle, drawCircle, drawRectangle, makeBox, makeCylinder, makeSphere, makeCone, makeTorus }) { ... return shape; }\`
+5. Critical Rules & Output Contract:
+   - Your response MUST contain exactly ONE executable \`\`\`javascript ... \`\`\` code block.
+   - Do NOT output raw conversational text or preamble outside the code block.
+   - You MUST export or define a function with this signature:
+     function main({ draw, sketch, drawRoundedRectangle, drawCircle, drawRectangle, makeBox, makeCylinder, makeSphere, makeCone, makeTorus }) {
+       // Code here
+       return finalShape;
+     }
+   - The main() function MUST return a SINGLE valid fused 3D solid or compound (e.g. \`return body.fuse(cover);\`). Never return an array or object.
    - All measurements are in millimeters (mm).
    - In your code, annotate key feature locations using comments in the format:
      \`// [PING: {"name": "Feature Name", "position": [x, y, z], "action": "Short Action Description"}]\`
-     This allows HaiCAD's 3D viewport to display live dynamic radar pings at those exact coordinates!
 
-6. Output ONLY the code inside a standard markdown code block:
+Example Response Format:
 \`\`\`javascript
-// CAD Code here
+// Precision Parametric Solid
 function main({ makeBox, makeCylinder }) {
   // [PING: {"name": "Base Plate", "position": [0, 0, 2], "action": "Extruding base"}]
   const base = makeBox(40, 40, 4);
-  return base;
+  const hole = makeCylinder(3, 10).translate([0, 0, -2]);
+  return base.cut(hole);
 }
 \`\`\`
 `;
@@ -510,6 +517,34 @@ export function extractSpatialPings(text: string): AIPingLocation[] {
     } catch {}
   }
   return pings;
+}
+
+export function extractExecutableCode(textResponse: string): string {
+  if (!textResponse || !textResponse.trim()) return '';
+
+  // 1. Check for standard triple backtick code block with main()
+  const codeBlockMatch = textResponse.match(/```(?:javascript|js|typescript|ts)?\s*([\s\S]*?)(?:```|$)/);
+  if (codeBlockMatch && (codeBlockMatch[1].includes('function main') || codeBlockMatch[1].includes('main('))) {
+    return codeBlockMatch[1].trim();
+  }
+
+  // 2. If code block is missing or doesn't have main, search for function main
+  const mainIdx = textResponse.indexOf('function main');
+  if (mainIdx !== -1) {
+    const fromMain = textResponse.slice(mainIdx);
+    const endFence = fromMain.indexOf('```');
+    if (endFence !== -1) {
+      return fromMain.slice(0, endFence).trim();
+    }
+    return fromMain.trim();
+  }
+
+  // 3. Fallback to full code block match or raw text
+  if (codeBlockMatch && codeBlockMatch[1].trim()) {
+    return codeBlockMatch[1].trim();
+  }
+
+  return textResponse.trim();
 }
 
 async function readGeminiSSEStream(
@@ -944,12 +979,8 @@ export async function generateCADCode(params: GenerateCADParams): Promise<Genera
     );
   }
 
-  // Parse code block
-  let extractedCode = textResponse;
-  const codeBlockMatch = textResponse.match(/```(?:javascript|js|typescript|ts)?([\s\S]*?)```/);
-  if (codeBlockMatch) {
-    extractedCode = codeBlockMatch[1].trim();
-  }
+  // Parse code block with robust extractor
+  let extractedCode = extractExecutableCode(textResponse);
 
   // Parse pings from code
   const pings: AIPingLocation[] = [];
@@ -974,8 +1005,8 @@ export async function generateCADCode(params: GenerateCADParams): Promise<Genera
 
   // Parse human readable steps
   const steps: string[] = [];
-  const lines = extractedCode.split('\n');
-  lines.forEach((line) => {
+  const lines: string[] = extractedCode.split('\n');
+  lines.forEach((line: string) => {
     const trimmed = line.trim();
     if (trimmed.startsWith('//') && !trimmed.includes('[PING:')) {
       const stepText = trimmed.replace(/^\/\/\s*(\d+\.|\*|-)?\s*/, '').trim();

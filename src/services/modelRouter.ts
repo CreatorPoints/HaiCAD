@@ -307,11 +307,16 @@ export function getCustomInstructions(mode: TaskMode, modelId: string): string {
     case 'REASONING':
       return `
 [STRICT EXPERT DIRECTIVE: MATHEMATICAL REASONING SPECIALIST]
+0. Mandatory Output Format:
+   - Your response MUST contain exactly one executable \`\`\`javascript ... \`\`\` code block containing the main() function.
+   - Do NOT output raw conversational text or markdown outside the code block.
+   - The main() function MUST return a single fused 3D solid (e.g. \`return body.fuse(cover);\`).
 1. Exact Coordinate Calculations:
    - Compute all polar, cartesian, and trigonometric coordinates with high precision in millimeters (mm).
    - For helical, swept, or gear teeth profiles, evaluate angles using explicit Math.PI expressions.
 2. Manifold Integrity:
    - Ensure all sketches form closed polygons with \`.close()\` before extruding or revolving.
+   - For arrays and cutouts, maintain positive wall thickness (at least 1.5mm) between features.
 3. 3D Spatial Radar Pings:
    - Place \`// [PING: {"name": "Feature Name", "position": [x, y, z], "action": "Action Description"}]\` annotations on the key calculated feature points.
 `;
@@ -319,8 +324,10 @@ export function getCustomInstructions(mode: TaskMode, modelId: string): string {
     case 'KERNEL_REPAIR':
       return `
 [STRICT EXPERT DIRECTIVE: SELF-HEALING KERNEL REPAIR]
+0. Mandatory Output Format:
+   - Output ONLY the fixed executable code in a single \`\`\`javascript ... \`\`\` code block.
 1. Debug the OpenCASCADE error directly. Resolve non-manifold edges, zero-thickness wall artifacts, and unclosed sketch loops.
-2. Return complete, verified, executable Replicad JavaScript with \`function main(cadEnv) { ... return shape; }\`.
+2. Return complete, verified, executable Replicad JavaScript with \`function main({ draw, drawCircle, drawRoundedRectangle, makeBox, makeCylinder, makeSphere }) { ... return shape; }\`.
 `;
 
     case 'QUESTION_EXPLANATION':
@@ -333,8 +340,12 @@ export function getCustomInstructions(mode: TaskMode, modelId: string): string {
     default:
       return `
 [STRICT EXPERT DIRECTIVE: CODE IMPLEMENTATION SPECIALIST]
+0. Mandatory Output Format:
+   - Your response MUST contain exactly one executable \`\`\`javascript ... \`\`\` code block containing the main() function.
+   - Do NOT output raw conversational text or markdown outside the code block.
+   - The main() function MUST return a single valid 3D solid (e.g. \`return basePlate;\`).
 1. Directional Edge Fillets:
-   - When filleting, use directional edge filters like \`shape.fillet(r, (e) => e.inDirection("Z"))\`.
+   - When filleting, use directional edge filters like \`shape.fillet(r, (e) => e.inDirection("Z"))\` or safe radii.
 2. Clean Boolean Cuts:
    - Provide extra cutter height and offset (e.g. height + 4, translate -2 on Z) so holes cut through completely without zero-thickness artifacts.
 3. Spatial Radar Markers:

@@ -25,8 +25,8 @@ function main({ draw, drawRoundedRectangle, makeCylinder }) {
     .sketchOnPlane("XZ")
     .extrude(35);
 
-  // 2. Add structural fillet to the internal corner
-  const bracketWithFillet = baseProfile.fillet(4, (e) => e.inDirection("Y").atDistance(10, "Z"));
+  // 2. Add structural fillet along Y axis
+  const bracketWithFillet = baseProfile.fillet(3, (e) => e.inDirection("Y"));
 
   // 3. Drill 2 mounting holes in the bottom flange
   const hole1 = makeCylinder(2.5, 20).translate([15, 10, -5]);

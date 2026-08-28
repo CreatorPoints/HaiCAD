@@ -15,6 +15,7 @@ import {
   saveKeyPool,
   fetchOpenRouterModels,
   fetchGeminiModels,
+  extractExecutableCode,
   KeyRotationEvent,
 } from './services/aiService';
 import { ArrowRightLeft, CheckCircle2, AlertTriangle, X } from 'lucide-react';
@@ -138,9 +139,9 @@ export const App: React.FC = () => {
         },
         onTokenStream: (accumulated, chunk) => {
           // Live stream tokens into the code editor in real-time
-          const codeMatch = accumulated.match(/```(?:javascript|js)?\s*([\s\S]*?)(?:```|$)/);
-          if (codeMatch && codeMatch[1].trim()) {
-            setCode(codeMatch[1]);
+          const extracted = extractExecutableCode(accumulated);
+          if (extracted && (extracted.includes('function main') || extracted.includes('main('))) {
+            setCode(extracted);
           }
         },
         onLivePing: (ping) => {
