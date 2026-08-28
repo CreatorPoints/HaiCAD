@@ -3,6 +3,7 @@ import { HeaderNavbar } from './components/HeaderNavbar';
 import { CADViewport, CADViewportHandle, RenderMode } from './components/CADViewport';
 import { AIChatPanel, ChatMessage } from './components/chat/AIChatPanel';
 import { LeftSidebar, SidebarTab } from './components/sidebar/LeftSidebar';
+import { ProjectDashboard } from './components/dashboard/ProjectDashboard';
 import { cadClient, WorkerMeshOutput } from './cad/cadClient';
 import {
   generateCADCode,
@@ -17,47 +18,46 @@ import {
   extractExecutableCode,
   KeyRotationEvent,
 } from './services/aiService';
+import {
+  CADProject,
+  loadAllProjects,
+  saveAllProjects,
+  getProjectById,
+  createProject,
+  updateProject,
+  deleteProject,
+  renameProject,
+  DEFAULT_PROJECT_CODE,
+} from './services/projectService';
 import { ArrowRightLeft, CheckCircle2, AlertTriangle, X } from 'lucide-react';
 
-const DEFAULT_STARTER_CODE = `// HaiCAD Precision Parametric Solid
-const PARAMS = {
-  width: 40,
-  length: 40,
-  thickness: 4,
-  centerBore: 8,
-  mountingPCD: 28,
-  holeDia: 3.2,
-};
-
-function main({ makeBox, makeCylinder }) {
-  // Step 1: Base Plate Extrusion
-  // [PING: {"name": "Base Plate", "position": [0, 0, 2], "action": "Extruding flange"}]
-  const base = makeBox(PARAMS.width, PARAMS.length, PARAMS.thickness);
-
-  // Step 2: Center Bore Hole
-  // [PING: {"name": "Center Bore", "position": [0, 0, 0], "action": "Drilling through-hole"}]
-  const centerHole = makeCylinder(PARAMS.centerBore / 2, PARAMS.thickness + 4).translate([0, 0, -2]);
-
-  let solid = base.cut(centerHole);
-
-  // Step 3: Bolt Pitch Circle Pattern
-  const r = PARAMS.mountingPCD / 2;
-  const bolt = makeCylinder(PARAMS.holeDia / 2, PARAMS.thickness + 4).translate([0, 0, -2]);
-
-  const p1 = bolt.clone().translate([r, r, 0]);
-  const p2 = bolt.clone().translate([-r, r, 0]);
-  const p3 = bolt.clone().translate([-r, -r, 0]);
-  const p4 = bolt.clone().translate([r, -r, 0]);
-
-  solid = solid.cut(p1).cut(p2).cut(p3).cut(p4);
-
-  return solid;
+function getProjectIdFromPath(): string | null {
+  const path = window.location.pathname;
+  const match = path.match(/^\/project\/([a-zA-Z0-9_-]+)/);
+  return match ? match[1] : null;
 }
-`;
 
 export const App: React.FC = () => {
+  // Multi-Project Router State
+  const [projects, setProjects] = useState<CADProject[]>(() => loadAllProjects());
+  const [currentProjectId, setCurrentProjectId] = useState<string | null>(() => getProjectIdFromPath());
+
+  // Listen to browser Back/Forward buttons
+  useEffect(() => {
+    const handlePopState = () => {
+      setCurrentProjectId(getProjectIdFromPath());
+    };
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, []);
+
+  // Current Active Project
+  const currentProject = currentProjectId
+    ? projects.find((p) => p.id === currentProjectId) || null
+    : null;
+
   // CAD Script & Geometry State
-  const [code, setCode] = useState<string>(DEFAULT_STARTER_CODE);
+  const [code, setCode] = useState<string>(() => currentProject?.code || DEFAULT_PROJECT_CODE);
   const [meshes, setMeshes] = useState<WorkerMeshOutput[]>([]);
   const [isBuilding, setIsBuilding] = useState<boolean>(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -76,17 +76,46 @@ export const App: React.FC = () => {
   const [keyPool, setKeyPool] = useState<APIKeyEntry[]>(() => loadKeyPool());
 
   // Procedural Models State (100% Free Defaults)
-  const [selectedModel, setSelectedModel] = useState<string>(DEFAULT_MODELS[0].id);
+  const [selectedModel, setSelectedModel] = useState<string>(() => currentProject?.selectedModel || DEFAULT_MODELS[0].id);
   const [availableModels, setAvailableModels] = useState<AIModelOption[]>(DEFAULT_MODELS);
 
   // AI Chat & Generation State
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [messages, setMessages] = useState<ChatMessage[]>(() => currentProject?.messages || []);
   const [isChatOpen, setIsChatOpen] = useState<boolean>(true);
   const [isGenerating, setIsGenerating] = useState<boolean>(false);
   const [currentStep, setCurrentStep] = useState<string>('');
   const [activePings, setActivePings] = useState<AIPingLocation[]>([]);
   const [lastUsedKeyLabel, setLastUsedKeyLabel] = useState<string | undefined>();
   const [rotationToast, setRotationToast] = useState<KeyRotationEvent | null>(null);
+
+  // Sync state when currentProjectId changes
+  useEffect(() => {
+    if (currentProjectId) {
+      let proj = projects.find((p) => p.id === currentProjectId);
+      if (!proj) {
+        // Automatically create project if navigating to new procedural URL
+        proj = createProject(undefined, DEFAULT_PROJECT_CODE, currentProjectId);
+        setProjects(loadAllProjects());
+      }
+      setCode(proj.code);
+      setMessages(proj.messages || []);
+      if (proj.selectedModel) setSelectedModel(proj.selectedModel);
+      runCode(proj.code);
+    }
+  }, [currentProjectId]);
+
+  // Auto-save active project changes to localStorage
+  useEffect(() => {
+    if (currentProjectId && currentProject) {
+      updateProject({
+        ...currentProject,
+        code,
+        messages,
+        selectedModel,
+        meshCount: meshes.length,
+      });
+    }
+  }, [code, messages, selectedModel, meshes.length, currentProjectId]);
 
   // Export State
   const [isExporting, setIsExporting] = useState<boolean>(false);
@@ -374,8 +403,62 @@ export const App: React.FC = () => {
     setMessages([]);
   };
 
+  const navigateToProject = (id: string) => {
+    window.history.pushState({}, '', `/project/${id}`);
+    setCurrentProjectId(id);
+  };
+
+  const navigateToDashboard = () => {
+    window.history.pushState({}, '', '/');
+    setCurrentProjectId(null);
+  };
+
+  const handleCreateNewProject = (customName?: string) => {
+    const newProj = createProject(customName);
+    setProjects(loadAllProjects());
+    navigateToProject(newProj.id);
+  };
+
+  const handleDeleteProject = (id: string) => {
+    const remaining = deleteProject(id);
+    setProjects(remaining);
+    if (currentProjectId === id) {
+      navigateToDashboard();
+    }
+  };
+
+  const handleRenameProject = (id: string, newName: string) => {
+    renameProject(id, newName);
+    setProjects(loadAllProjects());
+  };
+
   const activeKeysCount = keyPool.filter((k) => k.isActive).length;
   const rateLimitedCount = keyPool.filter((k) => k.isRateLimited && (k.rateLimitedUntil || 0) > Date.now()).length;
+
+  // Render Root Project Dashboard if on "/" or no active project
+  if (!currentProjectId) {
+    return (
+      <ProjectDashboard
+        projects={projects}
+        onOpenProject={navigateToProject}
+        onCreateNewProject={handleCreateNewProject}
+        onDeleteProject={handleDeleteProject}
+        onRenameProject={handleRenameProject}
+        keyPool={keyPool}
+        onOpenBYOK={() => {
+          if (projects.length > 0) {
+            navigateToProject(projects[0].id);
+            setActiveSidebarTab('byok');
+          } else {
+            const p = createProject();
+            setProjects(loadAllProjects());
+            navigateToProject(p.id);
+            setActiveSidebarTab('byok');
+          }
+        }}
+      />
+    );
+  }
 
   return (
     <div className="flex flex-col w-screen h-screen bg-background overflow-hidden select-none font-sans text-slate-100">
@@ -389,6 +472,10 @@ export const App: React.FC = () => {
         rateLimitedCount={rateLimitedCount}
         isChatOpen={isChatOpen}
         onToggleChat={() => setIsChatOpen((prev) => !prev)}
+        projectName={currentProject?.name}
+        projectId={currentProject?.id}
+        onGoToDashboard={navigateToDashboard}
+        onRenameProject={(newName) => currentProjectId && handleRenameProject(currentProjectId, newName)}
       />
 
       {/* Main Studio Workspace */}

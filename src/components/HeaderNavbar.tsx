@@ -10,6 +10,9 @@ import {
   Code2,
   Cpu,
   Bot,
+  LayoutGrid,
+  ChevronLeft,
+  Edit2,
 } from 'lucide-react';
 import { SidebarTab } from './sidebar/LeftSidebar';
 
@@ -22,6 +25,10 @@ interface HeaderNavbarProps {
   rateLimitedCount: number;
   isChatOpen?: boolean;
   onToggleChat?: () => void;
+  projectName?: string;
+  projectId?: string;
+  onGoToDashboard?: () => void;
+  onRenameProject?: (newName: string) => void;
 }
 
 export const HeaderNavbar: React.FC<HeaderNavbarProps> = ({
@@ -33,13 +40,40 @@ export const HeaderNavbar: React.FC<HeaderNavbarProps> = ({
   rateLimitedCount,
   isChatOpen = true,
   onToggleChat,
+  projectName,
+  projectId,
+  onGoToDashboard,
+  onRenameProject,
 }) => {
   const [showExportMenu, setShowExportMenu] = useState(false);
+  const [isEditingTitle, setIsEditingTitle] = useState(false);
+  const [titleInput, setTitleInput] = useState(projectName || '');
+
+  const handleSaveTitle = (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (onRenameProject && titleInput.trim()) {
+      onRenameProject(titleInput.trim());
+    }
+    setIsEditingTitle(false);
+  };
 
   return (
     <header className="h-14 w-full bg-surface/90 border-b border-surface-border px-4 flex items-center justify-between z-40 backdrop-blur-md shrink-0 select-none">
-      {/* Brand & Title */}
+      {/* Brand & Project Breadcrumb */}
       <div className="flex items-center gap-3">
+        {onGoToDashboard && (
+          <button
+            type="button"
+            onClick={onGoToDashboard}
+            title="Return to Projects Dashboard"
+            className="flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-surface hover:bg-surface-subtle border border-surface-border text-xs text-slate-300 hover:text-white transition-all cursor-pointer mr-1"
+          >
+            <ChevronLeft className="w-3.5 h-3.5" />
+            <LayoutGrid className="w-3.5 h-3.5 text-cyan" />
+            <span className="font-semibold hidden sm:inline">Projects</span>
+          </button>
+        )}
+
         <div className="flex items-center gap-2">
           <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-primary to-cyan flex items-center justify-center shadow-md shadow-primary/20">
             <Box className="w-4 h-4 text-white" />
@@ -47,14 +81,44 @@ export const HeaderNavbar: React.FC<HeaderNavbarProps> = ({
           <div>
             <div className="flex items-center gap-1.5">
               <span className="font-bold tracking-tight text-white text-base">HaiCAD</span>
-              <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-primary/20 text-primary-glow font-semibold">
-                AI Studio
-              </span>
             </div>
           </div>
         </div>
 
-        <div className="h-4 w-px bg-surface-border mx-1" />
+        <div className="h-4 w-px bg-surface-border mx-1 hidden sm:block" />
+
+        {/* Project Name / Slug Indicator */}
+        {projectId && (
+          <div className="hidden sm:flex items-center gap-2">
+            {isEditingTitle ? (
+              <form onSubmit={handleSaveTitle} className="flex items-center gap-1">
+                <input
+                  type="text"
+                  value={titleInput}
+                  onChange={(e) => setTitleInput(e.target.value)}
+                  autoFocus
+                  onBlur={() => handleSaveTitle()}
+                  className="px-2 py-0.5 rounded bg-background border border-cyan text-xs text-white focus:outline-none"
+                />
+              </form>
+            ) : (
+              <button
+                type="button"
+                onClick={() => {
+                  setTitleInput(projectName || '');
+                  setIsEditingTitle(true);
+                }}
+                className="flex items-center gap-1.5 px-2 py-0.5 rounded-lg hover:bg-surface-subtle text-xs text-white font-semibold transition-all group"
+              >
+                <span className="truncate max-w-[180px]">{projectName || 'Untitled CAD'}</span>
+                <span className="text-[10px] font-mono px-1.5 py-0.2 rounded bg-cyan/15 text-cyan-glow border border-cyan/30">
+                  /project/{projectId}
+                </span>
+                <Edit2 className="w-3 h-3 text-slate-400 opacity-0 group-hover:opacity-100 transition-opacity" />
+              </button>
+            )}
+          </div>
+        )}
 
         {/* Quick Nav Chips */}
         <div className="hidden sm:flex items-center gap-1.5">
