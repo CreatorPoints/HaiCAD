@@ -88,12 +88,30 @@ export const App: React.FC = () => {
   const [lastUsedKeyLabel, setLastUsedKeyLabel] = useState<string | undefined>();
   const [rotationToast, setRotationToast] = useState<KeyRotationEvent | null>(null);
 
+  // Compile / Rebuild Code
+  const runCode = useCallback(async (codeToRun: string) => {
+    setIsBuilding(true);
+    setErrorMessage(null);
+    try {
+      const result = await cadClient.evaluateCode(codeToRun);
+      if (result.success && result.meshes) {
+        setMeshes(result.meshes);
+      } else {
+        setErrorMessage(result.error || 'Failed to compile CAD model');
+      }
+    } catch (err: any) {
+      setErrorMessage(err?.message || String(err));
+    } finally {
+      setIsBuilding(false);
+    }
+  }, []);
+
   // Sync state when currentProjectId changes
   useEffect(() => {
     if (currentProjectId) {
-      let proj = projects.find((p) => p.id === currentProjectId);
+      const all = loadAllProjects();
+      let proj = all.find((p) => p.id === currentProjectId);
       if (!proj) {
-        // Automatically create project if navigating to new procedural URL
         proj = createProject(undefined, DEFAULT_PROJECT_CODE, currentProjectId);
         setProjects(loadAllProjects());
       }
@@ -102,7 +120,7 @@ export const App: React.FC = () => {
       if (proj.selectedModel) setSelectedModel(proj.selectedModel);
       runCode(proj.code);
     }
-  }, [currentProjectId]);
+  }, [currentProjectId, runCode]);
 
   // Auto-save active project changes to localStorage
   useEffect(() => {
@@ -144,29 +162,6 @@ export const App: React.FC = () => {
   useEffect(() => {
     refreshModelCatalogs();
   }, [refreshModelCatalogs]);
-
-  // Compile / Rebuild Code
-  const runCode = useCallback(async (codeToRun: string) => {
-    setIsBuilding(true);
-    setErrorMessage(null);
-    try {
-      const result = await cadClient.evaluateCode(codeToRun);
-      if (result.success && result.meshes) {
-        setMeshes(result.meshes);
-      } else {
-        setErrorMessage(result.error || 'Failed to compile CAD model');
-      }
-    } catch (err: any) {
-      setErrorMessage(err?.message || String(err));
-    } finally {
-      setIsBuilding(false);
-    }
-  }, []);
-
-  // Initial compile on mount
-  useEffect(() => {
-    runCode(code);
-  }, []);
 
   // Key Pool update handler
   const handleUpdateKeyPool = (newPool: APIKeyEntry[]) => {

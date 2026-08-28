@@ -13,7 +13,6 @@ export interface CADProject {
 }
 
 const STORAGE_PROJECTS_KEY = 'haicad_projects_v2';
-const STORAGE_CURRENT_PROJECT_ID = 'haicad_current_project_id';
 
 const ADJECTIVES = [
   'orbital', 'hex', 'stepper', 'titanium', 'precision', 'aero', 'pneumatic',
@@ -76,28 +75,25 @@ export function generateProceduralName(): { id: string; name: string } {
 }
 
 /**
- * Loads all projects from localStorage
+ * Direct raw read from localStorage without recursive side-effects
  */
-export function loadAllProjects(): CADProject[] {
+function readRawProjects(): CADProject[] {
   try {
     const raw = localStorage.getItem(STORAGE_PROJECTS_KEY);
     if (raw) {
-      const parsed: CADProject[] = JSON.parse(raw);
+      const parsed = JSON.parse(raw);
       if (Array.isArray(parsed) && parsed.length > 0) {
-        return parsed.sort((a, b) => b.updatedAt - a.updatedAt);
+        return parsed;
       }
     }
   } catch (e) {
-    console.warn('Failed to load projects from localStorage:', e);
+    console.warn('Failed to read projects from localStorage:', e);
   }
-
-  // If no projects exist, seed with a default starter project
-  const initial = createProject('Titanium Bracket #1001', DEFAULT_PROJECT_CODE, 'titanium-bracket-1001');
-  return [initial];
+  return [];
 }
 
 /**
- * Saves all projects to localStorage
+ * Direct raw write to localStorage
  */
 export function saveAllProjects(projects: CADProject[]): void {
   try {
@@ -108,10 +104,49 @@ export function saveAllProjects(projects: CADProject[]): void {
 }
 
 /**
+ * Creates default seed project object
+ */
+function createSeedProject(): CADProject {
+  return {
+    id: 'titanium-bracket-1001',
+    name: 'Titanium Bracket #1001',
+    description: 'Precision parametric mounting bracket designed with HaiCAD Copilot',
+    createdAt: Date.now(),
+    updatedAt: Date.now(),
+    code: DEFAULT_PROJECT_CODE,
+    messages: [
+      {
+        id: 'sys_init_seed',
+        sender: 'system',
+        content: 'Welcome to HaiCAD! Start by customizing parameters or typing a prompt in the Copilot chat.',
+        timestamp: Date.now(),
+      },
+    ],
+    selectedModel: 'auto-smart',
+    meshCount: 1,
+  };
+}
+
+/**
+ * Loads all projects from localStorage (sorted by most recently updated)
+ */
+export function loadAllProjects(): CADProject[] {
+  const existing = readRawProjects();
+  if (existing.length > 0) {
+    return existing.sort((a, b) => b.updatedAt - a.updatedAt);
+  }
+
+  // Seed default initial project
+  const seed = createSeedProject();
+  saveAllProjects([seed]);
+  return [seed];
+}
+
+/**
  * Gets a single project by ID
  */
 export function getProjectById(id: string): CADProject | null {
-  const projects = loadAllProjects();
+  const projects = readRawProjects();
   return projects.find((p) => p.id === id) || null;
 }
 
@@ -142,7 +177,7 @@ export function createProject(customName?: string, initialCode?: string, customI
     meshCount: 1,
   };
 
-  const existing = loadAllProjects().filter((p) => p.id !== id);
+  const existing = readRawProjects().filter((p) => p.id !== id);
   const updated = [newProject, ...existing];
   saveAllProjects(updated);
   return newProject;
@@ -152,7 +187,7 @@ export function createProject(customName?: string, initialCode?: string, customI
  * Updates a specific project in place
  */
 export function updateProject(updated: CADProject): void {
-  const projects = loadAllProjects();
+  const projects = readRawProjects();
   const index = projects.findIndex((p) => p.id === updated.id);
   if (index !== -1) {
     projects[index] = { ...updated, updatedAt: Date.now() };
@@ -166,7 +201,7 @@ export function updateProject(updated: CADProject): void {
  * Deletes a project by ID
  */
 export function deleteProject(id: string): CADProject[] {
-  const projects = loadAllProjects().filter((p) => p.id !== id);
+  const projects = readRawProjects().filter((p) => p.id !== id);
   saveAllProjects(projects);
   return projects;
 }
@@ -175,7 +210,7 @@ export function deleteProject(id: string): CADProject[] {
  * Renames a project by ID
  */
 export function renameProject(id: string, newName: string): CADProject | null {
-  const projects = loadAllProjects();
+  const projects = readRawProjects();
   const proj = projects.find((p) => p.id === id);
   if (proj) {
     proj.name = newName.trim() || proj.name;

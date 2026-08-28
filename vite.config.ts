@@ -22,4 +22,11 @@ export default defineConfig({
   optimizeDeps: {
     exclude: ['replicad-opencascadejs'],
   },
+  build: {
+    target: 'esnext',
+    reportCompressedSize: false,
+    chunkSizeWarningLimit: 3000,
+    cssMinify: 'esbuild',
+    minify: 'esbuild',
+  },
 });
