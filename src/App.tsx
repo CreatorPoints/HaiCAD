@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { HeaderNavbar } from './components/HeaderNavbar';
 import { CADViewport, CADViewportHandle, RenderMode } from './components/CADViewport';
-import { DynamicIsland } from './components/DynamicIsland';
+import { AIChatPanel, ChatMessage } from './components/chat/AIChatPanel';
 import { LeftSidebar, SidebarTab } from './components/sidebar/LeftSidebar';
 import { PRESETS, CADPreset } from './cad/presets';
 import { cadClient, WorkerMeshOutput } from './cad/cadClient';
@@ -38,11 +38,13 @@ export const App: React.FC = () => {
   // BYOK Key Pool State
   const [keyPool, setKeyPool] = useState<APIKeyEntry[]>(() => loadKeyPool());
 
-  // Procedural Models State
+  // Procedural Models State (100% Free Defaults)
   const [selectedModel, setSelectedModel] = useState<string>(DEFAULT_MODELS[0].id);
   const [availableModels, setAvailableModels] = useState<AIModelOption[]>(DEFAULT_MODELS);
 
-  // AI & Dynamic Island State
+  // AI Chat & Generation State
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [isChatOpen, setIsChatOpen] = useState<boolean>(true);
   const [isGenerating, setIsGenerating] = useState<boolean>(false);
   const [currentStep, setCurrentStep] = useState<string>('');
   const [activePings, setActivePings] = useState<AIPingLocation[]>([]);
@@ -59,8 +61,10 @@ export const App: React.FC = () => {
   useEffect(() => {
     fetchOpenRouterModels().then((fetched) => {
       if (fetched && fetched.length > 0) {
+        // Keep free models only
+        const freeFetched = fetched.filter((m) => m.isFree || m.id.endsWith(':free'));
         const geminiDefaults = DEFAULT_MODELS.filter((m) => m.provider === 'gemini');
-        setAvailableModels([...geminiDefaults, ...fetched]);
+        setAvailableModels([...geminiDefaults, ...freeFetched]);
       }
     });
   }, []);
@@ -94,11 +98,23 @@ export const App: React.FC = () => {
     saveKeyPool(newPool);
   };
 
-  // AI Generation Handler with Procedural BYOK Key Rotation & Failover
+  // AI Chat Generation Handler
   const handleGenerate = async (prompt: string, modelToUse: string) => {
     setIsGenerating(true);
-    setCurrentStep('Analyzing geometry constraints...');
+    setCurrentStep('Analyzing task intent & geometry constraints...');
     setActivePings([]);
+
+    // Add user message to conversation history
+    const userMsgId = 'usr_' + Date.now();
+    setMessages((prev) => [
+      ...prev,
+      {
+        id: userMsgId,
+        sender: 'user',
+        content: prompt,
+        timestamp: Date.now(),
+      },
+    ]);
 
     try {
       const result = await generateCADCode({
@@ -134,10 +150,26 @@ export const App: React.FC = () => {
       if (evalRes.success && evalRes.meshes) {
         setMeshes(evalRes.meshes);
         setErrorMessage(null);
-        setCurrentStep('Model successfully generated!');
+        setCurrentStep('Model successfully compiled!');
+
+        // Add Assistant Success Message to Chat Feed
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: 'asst_' + Date.now(),
+            sender: 'assistant',
+            content: `Geometry generated successfully using ${result.routingDecision.modelName}.`,
+            timestamp: Date.now(),
+            routingDecision: result.routingDecision,
+            steps: result.steps,
+            pings: result.pings,
+            codeSnippet: result.code,
+            usedKeyLabel: result.usedKeyLabel,
+          },
+        ]);
       } else {
         // Auto-fix attempt if error occurs (Self-healing loop)
-        setCurrentStep('Self-healing CAD geometry error...');
+        setCurrentStep('Self-healing CAD geometry compilation error...');
         setErrorMessage(evalRes.error || 'Initial build error');
 
         const fixResult = await generateCADCode({
@@ -160,19 +192,61 @@ export const App: React.FC = () => {
           setMeshes(secondEval.meshes);
           setErrorMessage(null);
           setCurrentStep('Self-healed and rendered!');
+
+          setMessages((prev) => [
+            ...prev,
+            {
+              id: 'asst_' + Date.now(),
+              sender: 'assistant',
+              content: `Geometry self-healed and compiled successfully after resolving OpenCASCADE kernel error.`,
+              timestamp: Date.now(),
+              routingDecision: fixResult.routingDecision,
+              steps: fixResult.steps,
+              pings: fixResult.pings,
+              codeSnippet: fixResult.code,
+              usedKeyLabel: fixResult.usedKeyLabel,
+            },
+          ]);
         } else {
-          setErrorMessage(secondEval.error || 'Build failed after self-healing');
+          const failErr = secondEval.error || 'Build failed after self-healing';
+          setErrorMessage(failErr);
+
+          setMessages((prev) => [
+            ...prev,
+            {
+              id: 'asst_' + Date.now(),
+              sender: 'assistant',
+              content: `Failed to compile geometry: ${failErr}`,
+              timestamp: Date.now(),
+              isError: true,
+              errorMessage: failErr,
+              codeSnippet: fixResult.code,
+            },
+          ]);
         }
       }
 
-      // Keep pings visible for 6 seconds then fade out
+      // Keep pings visible for 7 seconds then fade out
       if (pingTimeoutRef.current) clearTimeout(pingTimeoutRef.current);
       pingTimeoutRef.current = setTimeout(() => {
         setActivePings([]);
       }, 7000);
     } catch (err: any) {
-      setErrorMessage(err?.message || 'Error generating CAD');
+      const errMsg = err?.message || 'Error generating CAD';
+      setErrorMessage(errMsg);
       setCurrentStep('');
+
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: 'asst_err_' + Date.now(),
+          sender: 'assistant',
+          content: `Generation failed: ${errMsg}`,
+          timestamp: Date.now(),
+          isError: true,
+          errorMessage: errMsg,
+        },
+      ]);
     } finally {
       setIsGenerating(false);
       setTimeout(() => {
@@ -204,6 +278,15 @@ export const App: React.FC = () => {
   const handleSelectPreset = (preset: CADPreset) => {
     setCode(preset.code);
     runCode(preset.code);
+    setMessages((prev) => [
+      ...prev,
+      {
+        id: 'sys_' + Date.now(),
+        sender: 'system',
+        content: `Loaded preset: "${preset.name}".`,
+        timestamp: Date.now(),
+      },
+    ]);
   };
 
   const handleModelSelect = (modelId: string, modelObj?: AIModelOption) => {
@@ -211,6 +294,10 @@ export const App: React.FC = () => {
     if (modelObj && !availableModels.some((m) => m.id === modelObj.id)) {
       setAvailableModels((prev) => [...prev, modelObj]);
     }
+  };
+
+  const handleClearChat = () => {
+    setMessages([]);
   };
 
   const activeKeysCount = keyPool.filter((k) => k.isActive).length;
@@ -226,6 +313,8 @@ export const App: React.FC = () => {
         isExporting={isExporting}
         activeKeysCount={activeKeysCount}
         rateLimitedCount={rateLimitedCount}
+        isChatOpen={isChatOpen}
+        onToggleChat={() => setIsChatOpen((prev) => !prev)}
       />
 
       {/* Main Studio Workspace */}
@@ -309,23 +398,26 @@ export const App: React.FC = () => {
               </button>
             </aside>
           )}
-
-          {/* Floating Dynamic Island HUD */}
-          <DynamicIsland
-            onGenerate={handleGenerate}
-            isGenerating={isGenerating}
-            currentStep={currentStep}
-            activePings={activePings}
-            keyPool={keyPool}
-            selectedModel={selectedModel}
-            onSelectModel={handleModelSelect}
-            availableModels={availableModels}
-            onOpenBYOKTab={() => setActiveSidebarTab('byok')}
-            onOpenFreeModelsTab={() => setActiveSidebarTab('free_models')}
-            onSelectPreset={handleSelectPreset}
-            lastUsedKeyLabel={lastUsedKeyLabel}
-          />
         </main>
+
+        {/* Dedicated Permanent Right-Side AI Chat Area */}
+        <AIChatPanel
+          messages={messages}
+          onSendMessage={handleGenerate}
+          isGenerating={isGenerating}
+          currentStep={currentStep}
+          activePings={activePings}
+          keyPool={keyPool}
+          selectedModel={selectedModel}
+          onSelectModel={handleModelSelect}
+          availableModels={availableModels}
+          onOpenBYOKTab={() => setActiveSidebarTab('byok')}
+          onOpenFreeModelsTab={() => setActiveSidebarTab('free_models')}
+          onSelectPreset={handleSelectPreset}
+          onClearChat={handleClearChat}
+          isOpen={isChatOpen}
+          onToggleOpen={() => setIsChatOpen((prev) => !prev)}
+        />
       </div>
     </div>
   );

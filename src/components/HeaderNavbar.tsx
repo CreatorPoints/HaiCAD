@@ -9,6 +9,7 @@ import {
   SlidersHorizontal,
   Code2,
   Cpu,
+  Bot,
 } from 'lucide-react';
 import { SidebarTab } from './sidebar/LeftSidebar';
 
@@ -19,6 +20,8 @@ interface HeaderNavbarProps {
   isExporting: boolean;
   activeKeysCount: number;
   rateLimitedCount: number;
+  isChatOpen?: boolean;
+  onToggleChat?: () => void;
 }
 
 export const HeaderNavbar: React.FC<HeaderNavbarProps> = ({
@@ -28,6 +31,8 @@ export const HeaderNavbar: React.FC<HeaderNavbarProps> = ({
   isExporting,
   activeKeysCount,
   rateLimitedCount,
+  isChatOpen = true,
+  onToggleChat,
 }) => {
   const [showExportMenu, setShowExportMenu] = useState(false);
 
@@ -107,7 +112,7 @@ export const HeaderNavbar: React.FC<HeaderNavbarProps> = ({
         </div>
       </div>
 
-      {/* Right Controls (Export, BYOK Vault, GitHub) */}
+      {/* Right Controls (Export, BYOK Vault, AI Chat Toggle, GitHub) */}
       <div className="flex items-center gap-2.5">
         {/* Export Dropdown */}
         <div className="relative">
@@ -185,6 +190,22 @@ export const HeaderNavbar: React.FC<HeaderNavbarProps> = ({
               : 'Set BYOK Keys'}
           </span>
         </button>
+
+        {/* AI Chat Area Toggle Button */}
+        {onToggleChat && (
+          <button
+            type="button"
+            onClick={onToggleChat}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs font-medium transition-all ${
+              isChatOpen
+                ? 'bg-primary/20 border-primary text-white shadow-md shadow-primary/20'
+                : 'bg-surface-subtle border-surface-border text-slate-400 hover:text-white hover:border-slate-500'
+            }`}
+          >
+            <Bot className="w-3.5 h-3.5 text-cyan" />
+            <span>AI Chat</span>
+          </button>
+        )}
 
         {/* GitHub Link */}
         <a
