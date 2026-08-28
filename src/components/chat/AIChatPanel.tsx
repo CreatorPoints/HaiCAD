@@ -108,7 +108,7 @@ export const AIChatPanel: React.FC<AIChatPanelProps> = ({ aiCad, onApplyCodeToId
               <h3 className="font-bold text-sm text-white">OpenRouter Settings</h3>
             </div>
             <p className="text-xs text-slate-400">
-              HaiCAD connects directly to OpenRouter. By default it uses the <code className="text-cyan font-mono font-bold">openrouter/free</code> router.
+              HaiCAD connects directly to OpenRouter. Model is configured to <code className="text-cyan font-mono font-bold">inclusionai/ling-3.0-flash-fin:free</code>.
             </p>
             <form onSubmit={handleSaveKey} className="flex flex-col gap-3">
               <div className="space-y-1">
@@ -127,14 +127,14 @@ export const AIChatPanel: React.FC<AIChatPanelProps> = ({ aiCad, onApplyCodeToId
                 <label className="text-[11px] font-semibold text-slate-300">Model</label>
                 <input
                   type="text"
-                  placeholder="openrouter/free"
+                  placeholder="inclusionai/ling-3.0-flash-fin:free"
                   value={tempModel}
                   onChange={(e) => setTempModel(e.target.value)}
                   className="w-full px-3 py-2 text-xs bg-surface-subtle border border-surface-border rounded-xl text-white placeholder:text-slate-500 focus:outline-none focus:border-cyan font-mono"
                 />
                 <div className="flex flex-wrap gap-1 pt-1">
                   {[
-                    'openrouter/free',
+                    'inclusionai/ling-3.0-flash-fin:free',
                     'meta-llama/llama-3.3-70b-instruct:free',
                     'mistralai/mistral-7b-instruct:free',
                     'qwen/qwen-2.5-coder-32b-instruct:free',

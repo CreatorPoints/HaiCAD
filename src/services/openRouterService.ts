@@ -14,7 +14,7 @@ export interface OpenRouterCompletionOptions {
   maxTokens?: number;
 }
 
-export const DEFAULT_OPENROUTER_MODEL = 'openrouter/free';
+export const DEFAULT_OPENROUTER_MODEL = 'inclusionai/ling-3.0-flash-fin:free';
 const STORAGE_KEY_API_KEY = 'haicad_openrouter_api_key';
 const STORAGE_KEY_MODEL = 'haicad_openrouter_model';
 
@@ -31,7 +31,7 @@ export function setStoredOpenRouterKey(key: string): void {
 export function getStoredOpenRouterModel(): string {
   if (typeof window === 'undefined') return DEFAULT_OPENROUTER_MODEL;
   const stored = localStorage.getItem(STORAGE_KEY_MODEL);
-  if (!stored || stored.includes('gemma')) {
+  if (!stored || stored.includes('gemma') || stored === 'openrouter/free') {
     return DEFAULT_OPENROUTER_MODEL;
   }
   return stored;
