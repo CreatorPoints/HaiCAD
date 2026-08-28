@@ -66,6 +66,7 @@ export interface AiCadConfig {
   model?: string;
   maxRetries?: number;
   temperature?: number;
+  currentEditorCode?: string;
 }
 
 export interface AiCadState {

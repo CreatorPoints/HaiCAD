@@ -3,13 +3,14 @@
  * 
  * Implements:
  * 1. Strict State Machine: planning -> base -> cutouts -> features -> finalizing -> export
- * 2. Conversational Planning & Context Awareness
- * 3. Step-by-step modular Replicad code generation
- * 4. Self-Correction Loop with up to 3 automated retries upon Web Worker compilation/geometry failure
- * 5. OpenRouter API integration with autonomous model cycling & tracking
+ * 2. Real-time Live IDE Script Awareness (knows what is in the editor)
+ * 3. Conversational Planning & Context Awareness
+ * 4. Step-by-step modular Replicad code generation & modification
+ * 5. Self-Correction Loop with up to 3 automated retries upon Web Worker compilation/geometry failure
+ * 6. OpenRouter API integration with autonomous model cycling & tracking
  */
 
-import { useState, useCallback, useRef } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
 import {
   CadPhase,
   VerificationAction,
@@ -27,7 +28,7 @@ import {
 } from '../services/openRouterService';
 import {
   REPLICAD_SYSTEM_CONTEXT,
-  PLANNING_SYSTEM_PROMPT,
+  buildPlanningPrompt,
   buildPhaseCodePrompt,
   buildSelfCorrectionPrompt,
 } from '../services/aiCadPrompts';
@@ -76,6 +77,14 @@ export function useAiCad(config: AiCadConfig = {}) {
   // Geometry & Code Registry
   const [currentCode, setCurrentCode] = useState<string>('');
   const [meshes, setMeshes] = useState<WorkerMeshOutput[]>([]);
+
+  // Track live IDE script content
+  const currentEditorCodeRef = useRef<string>(config.currentEditorCode || '');
+  useEffect(() => {
+    if (config.currentEditorCode !== undefined) {
+      currentEditorCodeRef.current = config.currentEditorCode;
+    }
+  }, [config.currentEditorCode]);
 
   // Phase Code Functions Store
   const phaseCodeRegistry = useRef<{
@@ -184,13 +193,14 @@ export function useAiCad(config: AiCadConfig = {}) {
       }
 
       try {
-        // 1. Prepare Prompt with full context
+        // 1. Prepare Prompt with full context and live editor code
         const promptContent = buildPhaseCodePrompt(
           targetPhase,
           designParams,
           phaseCodeRegistry.current,
           currentStepPromptRef.current,
-          userFeedback
+          userFeedback,
+          currentEditorCodeRef.current
         );
 
         // Include recent user intent from chat history
@@ -334,7 +344,7 @@ export function useAiCad(config: AiCadConfig = {}) {
   );
 
   /**
-   * Handles user text input across all phases with full conversational context
+   * Handles user text input across all phases with live editor context awareness
    */
   const sendMessage = useCallback(
     async (userInput: string) => {
@@ -363,7 +373,7 @@ export function useAiCad(config: AiCadConfig = {}) {
         }
       }
 
-      // If in planning phase: analyze for vagueness or start code generation
+      // If in planning phase: analyze with live editor context
       if (phase === 'planning') {
         setIsLoading(true);
         setLastError(null);
@@ -378,7 +388,7 @@ export function useAiCad(config: AiCadConfig = {}) {
 
           const responseRes = await OpenRouterService.createChatCompletionWithFallback(
             [
-              { role: 'system', content: PLANNING_SYSTEM_PROMPT },
+              { role: 'system', content: buildPlanningPrompt(currentEditorCodeRef.current) },
               ...planningHistory,
               { role: 'user', content: trimmed },
             ],
@@ -412,13 +422,13 @@ export function useAiCad(config: AiCadConfig = {}) {
             .replace(/```(?:json)?\s*\{[\s\S]*?\}\s*```/g, '')
             .trim();
 
-          // Check if ready to begin Step 1: Base
+          // Check if ready to generate/modify
           if (jsonMeta?.isReadyToGenerate) {
             addMessage({
               role: 'assistant',
               phase: 'planning',
               modelUsed: usedAiModel,
-              content: `${conversationalText || 'Great! All core parameters established.'}\n\n📐 **Ready to generate Phase 1: Base Geometry.**`,
+              content: `${conversationalText || 'Updating design parameters.'}\n\n📐 **Generating geometry...**`,
             });
             currentStepPromptRef.current = trimmed;
             await generateAndVerifyPhaseCode('base', trimmed);

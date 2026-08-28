@@ -68,8 +68,8 @@ export const App: React.FC = () => {
   const [isBuilding, setIsBuilding] = useState<boolean>(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  // AI CAD Agent Hook
-  const aiCad = useAiCad();
+  // AI CAD Agent Hook (Aware of live IDE script)
+  const aiCad = useAiCad({ currentEditorCode: code });
 
   // Sync AI-generated code and meshes into active workspace
   useEffect(() => {

@@ -17,22 +17,42 @@ Strict Replicad Coding Directives:
 3. Directional Fillets: Always use directional edge filters to prevent topological kernel collapse:
    - Example: \`shape.fillet(r, (e) => e.inDirection("Z"))\` or \`shape.fillet(r, (e) => e.inPlane("XY"))\`
 4. Boolean Cuts: Always oversize cutter shapes slightly along the cutting axis (e.g. height + 4, translate -2 on Z) so holes pierce through cleanly without coincident boundary artifacts.
-5. Function Modularity: You are generating a single step function that returns a single valid 3D solid shape.
-6. NO MARKDOWN PROSE: Output ONLY the JavaScript function inside \`\`\`javascript ... \`\`\` code block.
+5. Function Modularity: You are generating a single step function or complete procedural solid.
+6. NO MARKDOWN PROSE OUTSIDE CODE: Output ONLY the JavaScript function inside \`\`\`javascript ... \`\`\` code block.
 `;
 
-export const PLANNING_SYSTEM_PROMPT = `
-You are the HaiCAD Engineering Design Consultant.
-Your task is to understand the user's 3D CAD design request and guide them through parametric solid modeling.
+export function buildPlanningPrompt(currentEditorCode?: string): string {
+  const codeContext = currentEditorCode && currentEditorCode.trim().length > 0
+    ? `
+[CURRENT ACTIVE CAD SCRIPT IN WORKSPACE IDE]:
+\`\`\`javascript
+${currentEditorCode.trim()}
+\`\`\`
+`
+    : '// No existing CAD script in editor.';
 
-Evaluation Rules:
-1. VAGUENESS CHECK:
-   - If the request is high-level or missing essential parameters (e.g., "make a macropad", "make a phone stand", "design a gear"), do NOT generate code yet.
-   - Respond conversationally with 1 to 2 specific clarifying questions (outer dimensions, hole diameter/spacing, wall thickness, or switch layout).
-   - Suggest 2-3 realistic options/presets so the user can choose easily.
+  return `
+You are the HaiCAD Engineering Design Consultant & Copilot.
+You have real-time access to the exact CAD code currently loaded in the user's workspace IDE.
+${codeContext}
 
-2. PARAMETER EXTRACTION:
-   - When the user provides dimensions, intent, or answers, summarize established parameters into a JSON block at the bottom:
+EVALUATION & BEHAVIOR RULES:
+
+1. EXISTING CODE / MODIFICATION REQUESTS (CRITICAL):
+   - If the user asks to modify, update, remove, add, or transform features of the current model (e.g., "remove holes", "make it 20mm taller", "add 4 fillets", "change screw diameter to 3mm", "make the base thicker", "chamfer edges"):
+     - LOOK AT THE [CURRENT ACTIVE CAD SCRIPT IN WORKSPACE IDE] ABOVE!
+     - You ALREADY have full context of what the object is, what its dimensions are, and what cuts/holes it contains from the code!
+     - Do NOT ask "What is the object?" or "What are the holes like?" if the object or its holes are already defined in the script!
+     - Immediately set \`isReadyToGenerate: true\`, summarize the modification concisely, and extract any updated parameters.
+
+2. NEW PART FROM SCRATCH / VAGUENESS CHECK:
+   - If the user is starting a completely new design from scratch and gives a high-level vague prompt (e.g., "make a macropad", "make a gear", "phone stand") WITHOUT basic dimensions:
+     - Ask 1 to 2 specific clarifying questions (outer dimensions, hole diameter, wall thickness, or switch layout).
+     - Suggest 2-3 realistic options/presets.
+     - Set \`isReadyToGenerate: false\`.
+
+3. PARAMETER EXTRACTION:
+   - Always output a structured JSON block at the bottom of your response:
    \`\`\`json
    {
      "isReadyToGenerate": true | false,
@@ -41,11 +61,11 @@ Evaluation Rules:
        "dimensions": { "width": 100, "length": 80, "height": 15 },
        "units": "mm"
      },
-     "summary": "Brief summary of the established design"
+     "summary": "Brief summary of the established design or modification"
    }
    \`\`\`
-   - Set \`isReadyToGenerate: true\` as soon as basic boundary dimensions (e.g. width, length, height or radius) are known or when the user explicitly requests to build/generate.
 `;
+}
 
 export function buildPhaseCodePrompt(
   phase: CadPhase,
@@ -56,21 +76,31 @@ export function buildPhaseCodePrompt(
     addFeaturesCode?: string;
   },
   userIntent?: string,
-  userFeedback?: string
+  userFeedback?: string,
+  currentEditorCode?: string
 ): string {
   const paramsJson = JSON.stringify(params, null, 2);
+  const activeScript = currentEditorCode && currentEditorCode.trim().length > 0
+    ? `
+[CURRENT SCRIPT IN IDE]:
+\`\`\`javascript
+${currentEditorCode.trim()}
+\`\`\`
+`
+    : '';
 
   switch (phase) {
     case 'base':
       return `
-User Project Goal: "${userIntent || params.objectType || 'Parametric Part'}"
+User Request / Intent: "${userIntent || params.objectType || 'Parametric Part'}"
+${activeScript}
 Established Parameters:
 ${paramsJson}
 
 ${userFeedback ? `User Adjustment Notes: "${userFeedback}"\n` : ''}
 Task: Generate the Step 1 Base Geometry function: \`function buildBase(cadEnv, params)\`
 Requirements:
-- Create the primary outer boundary solid matching the user's intent and parameters.
+- Create the primary outer boundary solid matching the user's intent and parameters (or modifying the base in the IDE script).
 - Use dimensions from \`params\` (with sensible fallbacks).
 - Output ONLY the \`buildBase\` function inside \`\`\`javascript ... \`\`\` block.
 
@@ -88,7 +118,8 @@ function buildBase(cadEnv, params) {
 
     case 'cutouts':
       return `
-User Project Goal: "${userIntent || params.objectType || 'Parametric Part'}"
+User Request / Intent: "${userIntent || params.objectType || 'Parametric Part'}"
+${activeScript}
 Established Parameters:
 ${paramsJson}
 
@@ -100,9 +131,9 @@ ${existingCodeRegistry.buildBaseCode || '// Base shape'}
 ${userFeedback ? `User Adjustment Notes: "${userFeedback}"\n` : ''}
 Task: Generate the Step 2 Cutouts function: \`function addCutouts(cadEnv, baseShape, params)\`
 Requirements:
-- Subtractive modeling: cut pockets, cavities, switch holes, bores, or slots from \`baseShape\`.
+- Subtractive modeling: cut pockets, cavities, switch holes, bores, or slots from \`baseShape\` (or remove holes if user requested removing holes).
 - Oversize cutters slightly along the cutting axis (e.g. height + 4, translate -2 on Z) so holes pierce through cleanly.
-- Return the modified solid.
+- If the user requested NO holes or to remove holes, return \`baseShape\` directly without cutting holes!
 - Output ONLY the \`addCutouts\` function inside \`\`\`javascript ... \`\`\` block.
 
 Example:
@@ -117,7 +148,8 @@ function addCutouts(cadEnv, baseShape, params) {
 
     case 'features':
       return `
-User Project Goal: "${userIntent || params.objectType || 'Parametric Part'}"
+User Request / Intent: "${userIntent || params.objectType || 'Parametric Part'}"
+${activeScript}
 Established Parameters:
 ${paramsJson}
 
@@ -137,7 +169,8 @@ Requirements:
 
     case 'finalizing':
       return `
-User Project Goal: "${userIntent || params.objectType || 'Parametric Part'}"
+User Request / Intent: "${userIntent || params.objectType || 'Parametric Part'}"
+${activeScript}
 Established Parameters:
 ${paramsJson}
 
