@@ -4,6 +4,7 @@ import { CADViewport, CADViewportHandle, RenderMode } from './components/CADView
 import { LeftSidebar, SidebarTab } from './components/sidebar/LeftSidebar';
 import { ProjectDashboard } from './components/dashboard/ProjectDashboard';
 import { cadClient, WorkerMeshOutput } from './cad/cadClient';
+import { useAiCad } from './hooks/useAiCad';
 import {
   CADProject,
   loadAllProjects,
@@ -45,8 +46,24 @@ export const App: React.FC = () => {
   const [isBuilding, setIsBuilding] = useState<boolean>(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  // Left Sidebar State (Defaults to 'view_tools' open)
-  const [activeSidebarTab, setActiveSidebarTab] = useState<SidebarTab | null>('view_tools');
+  // AI CAD Agent Hook
+  const aiCad = useAiCad();
+
+  // Sync AI-generated code and meshes into active workspace
+  useEffect(() => {
+    if (aiCad.currentCode) {
+      setCode(aiCad.currentCode);
+    }
+  }, [aiCad.currentCode]);
+
+  useEffect(() => {
+    if (aiCad.meshes && aiCad.meshes.length > 0) {
+      setMeshes(aiCad.meshes);
+    }
+  }, [aiCad.meshes]);
+
+  // Left Sidebar State (Defaults to 'ai_chat' open)
+  const [activeSidebarTab, setActiveSidebarTab] = useState<SidebarTab | null>('ai_chat');
 
   // Viewport Display Settings
   const [renderMode, setRenderMode] = useState<RenderMode>('clay');
@@ -191,6 +208,7 @@ export const App: React.FC = () => {
         <LeftSidebar
           activeTab={activeSidebarTab}
           onSelectTab={setActiveSidebarTab}
+          aiCad={aiCad}
           renderMode={renderMode}
           onSelectRenderMode={setRenderMode}
           showGrid={showGrid}

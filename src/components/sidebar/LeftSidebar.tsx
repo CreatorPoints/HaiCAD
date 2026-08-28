@@ -1,5 +1,6 @@
 import React from 'react';
 import {
+  Sparkles,
   SlidersHorizontal,
   Code2,
   ChevronLeft,
@@ -12,14 +13,18 @@ import {
 } from 'lucide-react';
 import Editor from '@monaco-editor/react';
 import { ViewToolsPanel } from './ViewToolsPanel';
+import { AIChatPanel } from '../chat/AIChatPanel';
 import { RenderMode } from '../CADViewport';
 import { WorkerMeshOutput } from '../../cad/cadClient';
+import { useAiCad } from '../../hooks/useAiCad';
 
-export type SidebarTab = 'view_tools' | 'ide';
+export type SidebarTab = 'ai_chat' | 'view_tools' | 'ide';
 
 interface LeftSidebarProps {
   activeTab: SidebarTab | null;
   onSelectTab: (tab: SidebarTab | null) => void;
+  // AI CAD props
+  aiCad: ReturnType<typeof useAiCad>;
   // View Tools props
   renderMode: RenderMode;
   onSelectRenderMode: (mode: RenderMode) => void;
@@ -45,6 +50,7 @@ interface LeftSidebarProps {
 export const LeftSidebar: React.FC<LeftSidebarProps> = ({
   activeTab,
   onSelectTab,
+  aiCad,
   renderMode,
   onSelectRenderMode,
   showGrid,
@@ -78,7 +84,9 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({
     id: SidebarTab;
     label: string;
     icon: React.ComponentType<{ className?: string }>;
+    accentColor?: string;
   }> = [
+    { id: 'ai_chat', label: 'AI CAD Agent', icon: Sparkles, accentColor: 'text-cyan' },
     { id: 'view_tools', label: 'View & Geometry Tools', icon: SlidersHorizontal },
     { id: 'ide', label: 'CAD Script IDE', icon: Code2 },
   ];
@@ -100,7 +108,9 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({
                 title={tab.label}
                 className={`relative w-10 h-10 rounded-xl flex items-center justify-center transition-all ${
                   isActive
-                    ? 'bg-primary text-white shadow-md shadow-primary/30 font-bold'
+                    ? tab.id === 'ai_chat'
+                      ? 'bg-cyan text-black shadow-md shadow-cyan/30 font-bold'
+                      : 'bg-primary text-white shadow-md shadow-primary/30 font-bold'
                     : 'text-slate-400 hover:text-white hover:bg-surface-subtle'
                 }`}
               >
@@ -114,7 +124,7 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({
         <div className="flex flex-col items-center gap-1">
           <button
             type="button"
-            onClick={() => onSelectTab(isDrawerOpen ? null : 'view_tools')}
+            onClick={() => onSelectTab(isDrawerOpen ? null : 'ai_chat')}
             title={isDrawerOpen ? 'Collapse Left Side Panel' : 'Expand Left Side Panel'}
             className="w-9 h-9 rounded-xl flex items-center justify-center text-slate-400 hover:text-white hover:bg-surface-subtle transition-colors"
           >
@@ -129,10 +139,12 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({
           {/* Header Bar */}
           <div className="flex items-center justify-between px-4 py-3 border-b border-surface-border bg-surface-subtle/50 shrink-0">
             <div className="flex items-center gap-2">
+              {activeTab === 'ai_chat' && <Sparkles className="w-4 h-4 text-cyan" />}
               {activeTab === 'view_tools' && <SlidersHorizontal className="w-4 h-4 text-cyan" />}
               {activeTab === 'ide' && <Code2 className="w-4 h-4 text-primary" />}
 
               <h2 className="text-xs font-bold uppercase tracking-wider text-white">
+                {activeTab === 'ai_chat' && 'AI Parametric CAD Agent'}
                 {activeTab === 'view_tools' && '3D Viewport & Geometry Tools'}
                 {activeTab === 'ide' && 'Parametric CAD Script IDE'}
               </h2>
@@ -162,6 +174,16 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({
 
           {/* Drawer Body Contents */}
           <div className="flex-1 flex flex-col overflow-hidden">
+            {/* AI CHAT PANEL */}
+            {activeTab === 'ai_chat' && (
+              <AIChatPanel
+                aiCad={aiCad}
+                onApplyCodeToIde={(newCode) => {
+                  onChangeCode(newCode);
+                }}
+              />
+            )}
+
             {/* VIEW TOOLS PANEL */}
             {activeTab === 'view_tools' && (
               <ViewToolsPanel

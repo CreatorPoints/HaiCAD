@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import {
+  Sparkles,
   Download,
   Box,
   SlidersHorizontal,
@@ -109,6 +110,19 @@ export const HeaderNavbar: React.FC<HeaderNavbarProps> = ({
 
         {/* Quick Nav Chips */}
         <div className="hidden sm:flex items-center gap-1.5">
+          <button
+            type="button"
+            onClick={() => onOpenTab('ai_chat')}
+            className={`flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-xs font-semibold transition-all ${
+              activeTab === 'ai_chat'
+                ? 'bg-cyan text-black shadow-md shadow-cyan/20 font-bold'
+                : 'text-cyan hover:text-white hover:bg-surface-subtle border border-cyan/30'
+            }`}
+          >
+            <Sparkles className="w-3.5 h-3.5" />
+            <span>AI CAD Agent</span>
+          </button>
+
           <button
             type="button"
             onClick={() => onOpenTab('view_tools')}
