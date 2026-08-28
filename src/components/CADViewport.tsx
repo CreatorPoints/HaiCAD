@@ -198,7 +198,13 @@ export const CADViewport = forwardRef<CADViewportHandle, CADViewportProps>(
         }
       });
 
-      scene.add(transformControls as any);
+      const gizmoHelper = typeof transformControls.getHelper === 'function'
+        ? transformControls.getHelper()
+        : ((transformControls as any).isObject3D ? (transformControls as any) : (transformControls as any)._root);
+
+      if (gizmoHelper) {
+        scene.add(gizmoHelper);
+      }
       transformControlsRef.current = transformControls;
 
       // 10. Resize Observer
@@ -230,6 +236,9 @@ export const CADViewport = forwardRef<CADViewportHandle, CADViewportProps>(
         resizeObserver.disconnect();
         cancelAnimationFrame(animationFrameId);
         controls.dispose();
+        if (gizmoHelper && scene) {
+          scene.remove(gizmoHelper);
+        }
         transformControls.dispose();
         if (currentMount && renderer.domElement) {
           currentMount.removeChild(renderer.domElement);
