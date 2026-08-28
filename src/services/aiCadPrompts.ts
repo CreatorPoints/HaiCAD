@@ -38,22 +38,21 @@ ${codeContext}
 
 EVALUATION & BEHAVIOR RULES:
 
-1. EXISTING CODE / MODIFICATION REQUESTS (CRITICAL):
+1. EXISTING CODE / MODIFICATION REQUESTS:
    - If the user asks to modify, update, remove, add, or transform features of the current model (e.g., "remove holes", "make it 20mm taller", "add 4 fillets", "change screw diameter to 3mm", "make the base thicker", "chamfer edges"):
-     - LOOK AT THE [CURRENT ACTIVE CAD SCRIPT IN WORKSPACE IDE] ABOVE!
-     - You ALREADY have full context of what the object is, what its dimensions are, and what cuts/holes it contains from the code!
-     - Do NOT ask "What is the object?" or "What are the holes like?" if the object or its holes are already defined in the script!
+     - Inspect the [CURRENT ACTIVE CAD SCRIPT IN WORKSPACE IDE] above.
+     - You ALREADY have full context of what the object is, what its dimensions are, and what cuts/holes it contains from the code.
      - Provide a brief summary of what you are changing, and output the FULL complete updated Replicad script inside a \`\`\`javascript block with \`function main({ makeBox, draw, makeCylinder, drawRoundedRectangle }) { ... return shape; }\`.
      - Include the JSON metadata block at the bottom with \`isReadyToGenerate: true\`.
 
-2. NEW PART FROM SCRATCH / VAGUENESS CHECK:
-   - If the user is starting a completely new design from scratch and gives a high-level vague prompt (e.g., "make a macropad", "make a gear", "phone stand") WITHOUT basic dimensions:
-     - Ask 1 to 2 specific clarifying questions (outer dimensions, hole diameter, wall thickness, or switch layout).
-     - Suggest 2-3 realistic options/presets.
-     - Set \`isReadyToGenerate: false\` in the JSON metadata.
+2. ATTACHED VECTOR DRAWINGS (SVG) & BLUEPRINTS:
+   - When an SVG vector drawing is attached, parse the viewBox, coordinates, dimensions, <rect>, <circle>, <polygon>, and <path> tags from the XML to reconstruct the precise 2D sketch and extrude into 3D CAD solids.
 
-3. PARAMETER EXTRACTION:
-   - Always output a structured JSON block at the bottom of your response:
+3. QUESTIONS / INSPECTIONS ONLY:
+   - If the user is just asking a question (e.g., "what is this?", "explain the code", "what dimensions do we have?"), answer conversationally without generating default replacement shapes.
+
+4. PARAMETER EXTRACTION:
+   - Always output a structured JSON block at the bottom:
    \`\`\`json
    {
      "isReadyToGenerate": true | false,
@@ -62,7 +61,7 @@ EVALUATION & BEHAVIOR RULES:
        "dimensions": { "width": 100, "length": 80, "height": 15 },
        "units": "mm"
      },
-     "summary": "Brief summary of the established design or modification"
+     "summary": "Brief summary of the design or modification"
    }
    \`\`\`
 `;
@@ -101,7 +100,7 @@ ${paramsJson}
 ${userFeedback ? `User Adjustment Notes: "${userFeedback}"\n` : ''}
 Task: Generate the Step 1 Base Geometry function: \`function buildBase(cadEnv, params)\`
 Requirements:
-- Create the primary outer boundary solid matching the user's intent and parameters (or modifying the base in the IDE script).
+- Create the primary outer boundary solid matching the user's intent and parameters.
 - Use dimensions from \`params\` (with sensible fallbacks).
 - Output ONLY the \`buildBase\` function inside \`\`\`javascript ... \`\`\` block.
 
@@ -132,19 +131,10 @@ ${existingCodeRegistry.buildBaseCode || '// Base shape'}
 ${userFeedback ? `User Adjustment Notes: "${userFeedback}"\n` : ''}
 Task: Generate the Step 2 Cutouts function: \`function addCutouts(cadEnv, baseShape, params)\`
 Requirements:
-- Subtractive modeling: cut pockets, cavities, switch holes, bores, or slots from \`baseShape\` (or remove holes if user requested removing holes).
+- Subtractive modeling: cut pockets, cavities, switch holes, bores, or slots from \`baseShape\`.
 - Oversize cutters slightly along the cutting axis (e.g. height + 4, translate -2 on Z) so holes pierce through cleanly.
 - If the user requested NO holes or to remove holes, return \`baseShape\` directly without cutting holes!
 - Output ONLY the \`addCutouts\` function inside \`\`\`javascript ... \`\`\` block.
-
-Example:
-\`\`\`javascript
-function addCutouts(cadEnv, baseShape, params) {
-  const { makeCylinder } = cadEnv;
-  const hole = makeCylinder(2.5, 30).translate([10, 10, -5]);
-  return baseShape.cut(hole);
-}
-\`\`\`
 `;
 
     case 'features':

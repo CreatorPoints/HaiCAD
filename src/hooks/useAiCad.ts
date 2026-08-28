@@ -3,10 +3,10 @@
  * 
  * Implements:
  * 1. Live Workspace IDE Synchronization (instantly recompiles & edits code)
- * 2. Conversational Intent Understanding & Modification Memory
+ * 2. Conversational Intent Understanding & SVG Vector Drawing Parsing
  * 3. Self-Correction Loop with up to 3 automated retries upon Web Worker compilation/geometry failure
  * 4. OpenRouter API integration with autonomous model cycling & tracking
- * 5. Direct User-Driven Workflows (no rigid forced extra steps on completed models)
+ * 5. Simple Verification: "Yes" (apply and done) or "No, instead..." (user-guided adjustments)
  */
 
 import { useState, useCallback, useRef, useEffect } from 'react';
@@ -314,7 +314,6 @@ export function useAiCad(config: AiCadConfig = {}) {
 
         // 4. Handle Result
         if (compilationSuccess) {
-          setPhase(targetPhase);
           setNeedsVerification(true);
           setPendingVerificationPhase(targetPhase);
 
@@ -324,8 +323,8 @@ export function useAiCad(config: AiCadConfig = {}) {
             codeSnippet: candidateCode,
             needsVerification: true,
             modelUsed: usedAiModel,
-            content: `### 3D Model Generated ⚡\n\n\`\`\`javascript\n${candidateCode}\n\`\`\`\n\n**CAD model updated in workspace. Verify geometry? (Yes/No/Modify)**`,
-            suggestedOptions: ['Yes (Looks Great)', 'Modify with Notes', 'Export STEP (.step)'],
+            content: `### 3D Model Updated ⚡\n\n\`\`\`javascript\n${candidateCode}\n\`\`\`\n\n**Apply these changes to your model?**`,
+            suggestedOptions: ['Yes (Apply)', 'No, instead...'],
           });
           return true;
         } else {
@@ -377,19 +376,12 @@ export function useAiCad(config: AiCadConfig = {}) {
       // Handle active verification state if user types text while verification is pending
       if (needsVerification && pendingVerificationPhase) {
         const lower = trimmed.toLowerCase();
-        if (lower.startsWith('yes') || lower.includes('proceed') || lower.includes('looks good') || lower.includes('looks great') || lower === 'y') {
+        if (lower === 'yes' || lower.startsWith('yes') || lower.includes('apply') || lower.includes('looks good') || lower.includes('looks great') || lower === 'y') {
           await verifyStep('Yes');
           return;
-        } else if (lower.startsWith('no') || lower.includes('regenerate') || lower === 'n') {
-          await verifyStep('No');
-          return;
-        } else if (lower.includes('export')) {
-          setPhase('export');
-          setNeedsVerification(false);
-          setPendingVerificationPhase(null);
-          return;
         } else {
-          await verifyStep('Modify', trimmed);
+          const cleanNote = trimmed.replace(/^no,?\s*(instead\s*:?)?/i, '').trim();
+          await verifyStep('Modify', cleanNote || trimmed);
           return;
         }
       }
@@ -399,25 +391,26 @@ export function useAiCad(config: AiCadConfig = {}) {
       setLastError(null);
 
       try {
-        // Format text content including non-image file texts
+        // Format text content including non-image file texts & vector SVG code
         let fullUserPrompt = trimmed;
         if (attachments && attachments.length > 0) {
           for (const att of attachments) {
             if (att.textContent) {
-              fullUserPrompt += `\n\n[ATTACHED FILE: ${att.name}]:\n\`\`\`\n${att.textContent}\n\`\`\``;
+              const fileTypeLabel = att.type === 'image/svg+xml' ? 'SVG VECTOR DRAWING XML' : 'FILE CONTENT';
+              fullUserPrompt += `\n\n[ATTACHED ${fileTypeLabel}: ${att.name}]:\n\`\`\`xml\n${att.textContent}\n\`\`\``;
             }
           }
         }
 
-        // Check for image attachments
-        const imageAttachments = attachments?.filter((a) => a.dataUrl && a.type.startsWith('image/')) || [];
+        // Check for raster image attachments (PNG, JPEG, WebP)
+        const rasterImages = attachments?.filter((a) => a.dataUrl && a.type.startsWith('image/') && a.type !== 'image/svg+xml') || [];
 
         // Build user content part (either string or multi-modal array)
         let userTurnContent: string | any[];
-        if (imageAttachments.length > 0) {
+        if (rasterImages.length > 0) {
           userTurnContent = [
             { type: 'text', text: fullUserPrompt || 'Please inspect this attached CAD drawing/reference image and generate or modify the model:' },
-            ...imageAttachments.map((img) => ({
+            ...rasterImages.map((img) => ({
               type: 'image_url',
               image_url: { url: img.dataUrl },
             })),
@@ -465,15 +458,14 @@ export function useAiCad(config: AiCadConfig = {}) {
           }));
         }
 
-        // Check if the response contains executable code (e.g. from a direct modification request like "remove holes")
+        // Check if the response contains executable code
         const rawCode = extractCodeBlock(response);
         if (rawCode && (rawCode.includes('function main') || rawCode.includes('main('))) {
           const evalResult = await evaluateInWorker(rawCode);
           if (evalResult.success) {
             setCurrentCode(rawCode);
-            setPhase('export');
             setNeedsVerification(true);
-            setPendingVerificationPhase('export');
+            setPendingVerificationPhase('base');
 
             // Clean conversational text (strip json)
             const conversationalText = response
@@ -482,12 +474,12 @@ export function useAiCad(config: AiCadConfig = {}) {
 
             addMessage({
               role: 'assistant',
-              phase: 'export',
+              phase: 'base',
               codeSnippet: rawCode,
               modelUsed: usedAiModel,
               needsVerification: true,
-              content: `${conversationalText}\n\n**CAD model updated in workspace. Verify geometry? (Yes/No/Modify)**`,
-              suggestedOptions: ['Yes (Looks Great)', 'Modify with Notes', 'Export STEP (.step)'],
+              content: `${conversationalText}\n\n**Apply these changes to your model?**`,
+              suggestedOptions: ['Yes (Apply)', 'No, instead...'],
             });
             return;
           }
@@ -498,26 +490,14 @@ export function useAiCad(config: AiCadConfig = {}) {
           .replace(/```(?:json)?\s*\{[\s\S]*?\}\s*```/g, '')
           .trim();
 
-        // Check if ready to generate from scratch
-        if (jsonMeta?.isReadyToGenerate) {
-          addMessage({
-            role: 'assistant',
-            phase: 'base',
-            modelUsed: usedAiModel,
-            content: `${conversationalText || 'Generating geometry...'}\n\n📐 **Building parametric model...**`,
-          });
-          currentStepPromptRef.current = trimmed;
-          await generateAndVerifyPhaseCode('base', trimmed);
-        } else {
-          // Clarifying question or conversational answer
-          addMessage({
-            role: 'assistant',
-            phase: phase === 'planning' ? 'planning' : phase,
-            isQuestion: true,
-            modelUsed: usedAiModel,
-            content: conversationalText || response,
-          });
-        }
+        // Conversational answer or clarifying question
+        addMessage({
+          role: 'assistant',
+          phase,
+          isQuestion: true,
+          modelUsed: usedAiModel,
+          content: conversationalText || response,
+        });
       } catch (err: any) {
         const errText = formatCadError(err);
         setLastError(errText);
@@ -539,58 +519,36 @@ export function useAiCad(config: AiCadConfig = {}) {
       apiKey,
       model,
       addMessage,
-      generateAndVerifyPhaseCode,
       evaluateInWorker,
       handleModelCycle,
     ]
   );
 
   /**
-   * Handles user verification: Yes (Model looks great), No (Regenerate), Modify (Incorporate feedback)
+   * Handles simple user verification: "Yes" (apply & done) or "No, instead..." (apply user adjustment)
    */
   const verifyStep = useCallback(
     async (action: VerificationAction, feedback?: string) => {
-      if (!pendingVerificationPhase) return;
-
-      const currentVerifiedPhase = pendingVerificationPhase;
       setNeedsVerification(false);
       setPendingVerificationPhase(null);
 
       if (action === 'Yes') {
-        setPhase('export');
         addMessage({
           role: 'user',
-          content: '✅ Verified geometry: Looks great!',
-          phase: 'export',
+          content: '✅ Yes (Changes Applied)',
+          phase,
         });
-
-        addMessage({
-          role: 'assistant',
-          phase: 'export',
-          content: `🎉 **Parametric 3D Solid Ready!**\n\nThe model is active in your workspace IDE and compiled in the 3D viewport.\nYou can continue modifying it anytime by typing in the chat, or export directly to **STEP** or **STL**:`,
-          suggestedOptions: ['Export STEP (.step)', 'Export STL (.stl)', 'Start New Design'],
-        });
-      } else if (action === 'No') {
+      } else {
+        const modifyNote = feedback || 'Please adjust the model.';
         addMessage({
           role: 'user',
-          content: '🔄 Geometry rejected. Regenerating model...',
-          phase: currentVerifiedPhase,
+          content: `✏️ No, instead: ${modifyNote}`,
+          phase,
         });
-        await generateAndVerifyPhaseCode(
-          'base',
-          currentStepPromptRef.current
-        );
-      } else if (action === 'Modify') {
-        const modifyNote = feedback || 'Please refine the geometry.';
-        addMessage({
-          role: 'user',
-          content: `✏️ Modify request: ${modifyNote}`,
-          phase: currentVerifiedPhase,
-        });
-        await sendMessage(modifyNote);
+        await sendMessage(`No, instead ${modifyNote}`);
       }
     },
-    [pendingVerificationPhase, addMessage, generateAndVerifyPhaseCode, sendMessage]
+    [addMessage, sendMessage, phase]
   );
 
   /**

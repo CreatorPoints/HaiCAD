@@ -13,17 +13,14 @@ import {
   Download,
   AlertTriangle,
   Key,
-  ShieldCheck,
-  ChevronRight,
   Copy,
   Check,
   Cpu,
   Paperclip,
-  Image as ImageIcon,
   X,
   FileText,
 } from 'lucide-react';
-import { CadPhase, VerificationAction, AiAttachment } from '../../types/aiCadTypes';
+import { VerificationAction, AiAttachment } from '../../types/aiCadTypes';
 import { useAiCad } from '../../hooks/useAiCad';
 import { FREE_MODELS_PRESETS } from '../../services/openRouterService';
 
@@ -31,15 +28,6 @@ interface AIChatPanelProps {
   aiCad: ReturnType<typeof useAiCad>;
   onApplyCodeToIde?: (code: string) => void;
 }
-
-const PHASES: Array<{ id: CadPhase; label: string; number: number }> = [
-  { id: 'planning', label: 'Planning', number: 1 },
-  { id: 'base', label: 'Base', number: 2 },
-  { id: 'cutouts', label: 'Cutouts', number: 3 },
-  { id: 'features', label: 'Features', number: 4 },
-  { id: 'finalizing', label: 'Finalize', number: 5 },
-  { id: 'export', label: 'Export', number: 6 },
-];
 
 /**
  * Custom Markdown Code Block with Copy Button
@@ -57,7 +45,7 @@ const CodeBlock: React.FC<{
   };
 
   return (
-    <div className="my-2.5 rounded-xl overflow-hidden border border-surface-border bg-[#141820] text-xs font-mono select-text shadow-md">
+    <div className="my-2 rounded-xl overflow-hidden border border-surface-border bg-[#141820] text-xs font-mono select-text shadow-md">
       <div className="flex items-center justify-between px-3 py-1.5 bg-surface-subtle/80 border-b border-surface-border text-slate-400 text-[10px]">
         <span className="font-semibold text-cyan uppercase tracking-wider">
           {language || 'code'}
@@ -90,7 +78,6 @@ const CodeBlock: React.FC<{
 
 export const AIChatPanel: React.FC<AIChatPanelProps> = ({ aiCad }) => {
   const {
-    phase,
     designParams,
     messages,
     isLoading,
@@ -110,8 +97,8 @@ export const AIChatPanel: React.FC<AIChatPanelProps> = ({ aiCad }) => {
   const [input, setInput] = useState('');
   const [attachments, setAttachments] = useState<AiAttachment[]>([]);
   const [isDragging, setIsDragging] = useState(false);
-  const [modifyNote, setModifyNote] = useState('');
-  const [isModifying, setIsModifying] = useState(false);
+  const [insteadNote, setInsteadNote] = useState('');
+  const [isInsteadOpen, setIsInsteadOpen] = useState(false);
   const [showKeyModal, setShowKeyModal] = useState(!apiKey);
   const [tempApiKey, setTempApiKey] = useState(apiKey);
   const [tempModel, setTempModel] = useState(model || 'inclusionai/ling-3.0-flash-fin:free');
@@ -125,16 +112,33 @@ export const AIChatPanel: React.FC<AIChatPanelProps> = ({ aiCad }) => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, isLoading, isCorrecting, attachments]);
 
-  // Read files and convert to AiAttachment
+  // Read files and convert to AiAttachment (with explicit SVG text extraction)
   const processFiles = async (files: FileList | File[]) => {
     const newAttachments: AiAttachment[] = [];
 
     for (let i = 0; i < files.length; i++) {
       const file = files[i];
-      const isImage = file.type.startsWith('image/');
+      const isSvg = file.type === 'image/svg+xml' || file.name.toLowerCase().endsWith('.svg');
+      const isRasterImage = file.type.startsWith('image/') && !isSvg;
       const id = 'att_' + Math.random().toString(36).substring(2, 9);
 
-      if (isImage) {
+      if (isSvg) {
+        // Read SVG as raw text XML for the LLM to inspect coordinates/paths
+        const textContent = await new Promise<string>((resolve) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(reader.result as string);
+          reader.readAsText(file);
+        });
+        const dataUrl = `data:image/svg+xml;utf8,${encodeURIComponent(textContent)}`;
+        newAttachments.push({
+          id,
+          name: file.name,
+          type: 'image/svg+xml',
+          size: file.size,
+          textContent,
+          dataUrl,
+        });
+      } else if (isRasterImage) {
         const dataUrl = await new Promise<string>((resolve) => {
           const reader = new FileReader();
           reader.onload = () => resolve(reader.result as string);
@@ -249,8 +253,6 @@ export const AIChatPanel: React.FC<AIChatPanelProps> = ({ aiCad }) => {
     }
   };
 
-  const activePhaseIndex = PHASES.findIndex((p) => p.id === phase);
-
   return (
     <div
       className={`flex flex-col h-full bg-surface select-text relative overflow-hidden transition-colors ${
@@ -335,64 +337,63 @@ export const AIChatPanel: React.FC<AIChatPanelProps> = ({ aiCad }) => {
         </div>
       )}
 
-      {/* 2. Top Phase Pipeline Bar */}
-      <div className="px-3 py-2.5 bg-surface-subtle/70 border-b border-surface-border flex items-center justify-between shrink-0">
-        <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-0.5">
-          {PHASES.map((p, idx) => {
-            const isCurrent = p.id === phase;
-            const isCompleted = idx < activePhaseIndex;
-            return (
-              <div key={p.id} className="flex items-center gap-1 shrink-0">
-                <div
-                  className={`flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold transition-all ${
-                    isCurrent
-                      ? 'bg-cyan text-black shadow-sm font-bold'
-                      : isCompleted
-                      ? 'bg-emerald/20 text-emerald border border-emerald/30'
-                      : 'bg-surface border border-surface-border text-slate-500'
-                  }`}
-                >
-                  {isCompleted ? (
-                    <CheckCircle2 className="w-2.5 h-2.5" />
-                  ) : (
-                    <span>{p.number}</span>
-                  )}
-                  <span>{p.label}</span>
-                </div>
-                {idx < PHASES.length - 1 && (
-                  <ChevronRight className="w-2.5 h-2.5 text-slate-600 shrink-0" />
-                )}
-              </div>
-            );
-          })}
-        </div>
+      {/* 2. Top Header Bar: Model Badge + Direct Export + Reset */}
+      <div className="px-3 py-2 bg-surface-subtle/70 border-b border-surface-border flex items-center justify-between shrink-0">
+        <div className="flex items-center gap-1.5">
+          <div className="w-5 h-5 rounded-lg bg-cyan/20 text-cyan flex items-center justify-center">
+            <Sparkles className="w-3 h-3" />
+          </div>
+          <span className="text-xs font-bold text-white tracking-wide">HaiCAD AI</span>
 
-        <div className="flex items-center gap-1 shrink-0 ml-2">
           <button
             type="button"
             onClick={() => setShowKeyModal(true)}
             title={`Active Model: ${model}`}
-            className="flex items-center gap-1 px-2 py-1 text-slate-400 hover:text-white hover:bg-surface rounded-lg transition-colors text-[10px] font-mono border border-surface-border/60"
+            className="flex items-center gap-1 px-1.5 py-0.5 ml-1 text-slate-400 hover:text-white hover:bg-surface rounded-lg transition-colors text-[10px] font-mono border border-surface-border/60"
           >
-            <Cpu className="w-3 h-3 text-cyan" />
-            <span className="max-w-[70px] truncate">{model.split('/')[1]?.replace(':free', '') || 'Model'}</span>
+            <Cpu className="w-2.5 h-2.5 text-cyan" />
+            <span className="max-w-[85px] truncate">{model.split('/')[1]?.replace(':free', '') || 'Model'}</span>
           </button>
+        </div>
+
+        <div className="flex items-center gap-1 shrink-0">
+          {/* Quick Export Actions */}
+          <button
+            type="button"
+            onClick={() => handleExport('step')}
+            title="Download STEP (.step) B-Rep Solid"
+            className="flex items-center gap-1 px-2 py-1 bg-surface border border-surface-border hover:border-cyan text-slate-300 hover:text-white rounded-lg text-[10px] font-medium transition-colors"
+          >
+            <Download className="w-2.5 h-2.5 text-cyan" />
+            <span>STEP</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => handleExport('stl')}
+            title="Download STL (.stl) 3D Printing Mesh"
+            className="flex items-center gap-1 px-2 py-1 bg-surface border border-surface-border hover:border-emerald text-slate-300 hover:text-white rounded-lg text-[10px] font-medium transition-colors"
+          >
+            <Download className="w-2.5 h-2.5 text-emerald" />
+            <span>STL</span>
+          </button>
+
           <button
             type="button"
             onClick={resetSession}
             title="Reset Design Loop"
-            className="p-1.5 text-slate-400 hover:text-red-400 hover:bg-surface rounded-lg transition-colors"
+            className="p-1 text-slate-400 hover:text-red-400 hover:bg-surface rounded-lg transition-colors ml-0.5"
           >
-            <RefreshCw className="w-3.5 h-3.5" />
+            <RefreshCw className="w-3 h-3" />
           </button>
         </div>
       </div>
 
       {/* 3. Parameter Quick Chips */}
       {designParams?.dimensions && Object.keys(designParams.dimensions).length > 0 && (
-        <div className="px-3 py-1.5 bg-surface-subtle/30 border-b border-surface-border flex items-center gap-2 overflow-x-auto no-scrollbar shrink-0 text-[11px] font-mono">
+        <div className="px-3 py-1 bg-surface-subtle/30 border-b border-surface-border flex items-center gap-2 overflow-x-auto no-scrollbar shrink-0 text-[11px] font-mono">
           <span className="text-slate-500 flex items-center gap-1">
-            <Sliders className="w-3 h-3 text-cyan" /> Params:
+            <Sliders className="w-3 h-3 text-cyan" />
           </span>
           {Object.entries(designParams.dimensions).map(([k, v]) => (
             <span
@@ -414,10 +415,10 @@ export const AIChatPanel: React.FC<AIChatPanelProps> = ({ aiCad }) => {
             </div>
             <h3 className="text-sm font-semibold text-white mb-1">Agentic CAD Designer</h3>
             <p className="text-xs text-slate-400 max-w-xs mb-4">
-              Describe what you want to create or paste/upload reference drawings and sketches (PNG, JPEG, STEP, SVG).
+              Describe what you want to create, request modifications on the loaded model, or attach blueprints & vector SVGs.
             </p>
             <div className="flex flex-wrap justify-center gap-2">
-              {['3x3 Macropad with Cherry MX switches', 'L-Bracket 60x40x10 with 4 holes', 'Filleted NEMA 17 motor mount'].map(
+              {['3x3 Macropad with Cherry MX switches', 'L-Bracket 60x40x10 with 4 holes', 'Remove all holes'].map(
                 (prompt) => (
                   <button
                     key={prompt}
@@ -485,7 +486,7 @@ export const AIChatPanel: React.FC<AIChatPanelProps> = ({ aiCad }) => {
               >
                 {/* Message Header Bar for Assistant: Model Badge + Copy Button */}
                 {!isUser && (
-                  <div className="flex items-center justify-between pb-2 mb-2 border-b border-surface-border/60 text-[10px] text-slate-400">
+                  <div className="flex items-center justify-between pb-1.5 mb-2 border-b border-surface-border/60 text-[10px] text-slate-400">
                     <div className="flex items-center gap-1.5 font-mono">
                       <Cpu className="w-3 h-3 text-cyan" />
                       <span className="text-cyan font-medium">
@@ -523,7 +524,7 @@ export const AIChatPanel: React.FC<AIChatPanelProps> = ({ aiCad }) => {
                           <img
                             src={att.dataUrl}
                             alt={att.name}
-                            className="w-24 h-24 object-cover rounded-lg bg-black/40"
+                            className="w-24 h-24 object-contain rounded-lg bg-black/40 p-1"
                           />
                         ) : (
                           <div className="flex items-center gap-1.5 px-2 py-1 bg-black/30 text-[10px] font-mono">
@@ -607,34 +608,27 @@ export const AIChatPanel: React.FC<AIChatPanelProps> = ({ aiCad }) => {
         {isLoading && (
           <div className="flex items-center gap-2 text-xs text-slate-400 px-3 py-2 bg-surface-subtle/50 rounded-xl border border-surface-border/50 animate-pulse">
             <RefreshCw className="w-3.5 h-3.5 animate-spin text-cyan" />
-            <span>{isCorrecting ? `Self-correcting CAD error (Attempt ${retryCount}/3)...` : 'HaiCAD AI is drafting procedural geometry...'}</span>
+            <span>{isCorrecting ? `Self-correcting CAD error (Attempt ${retryCount}/3)...` : 'Computing CAD geometry...'}</span>
           </div>
         )}
 
-        {/* 5. Verification Gate Card */}
+        {/* 5. Clean Simple Verification Bar: "Yes" or "No, instead..." */}
         {needsVerification && (
-          <div className="p-4 rounded-2xl bg-cyan/5 border-2 border-cyan/40 shadow-lg space-y-3 animate-in zoom-in-95 select-text">
-            <div className="flex items-center gap-2 text-cyan font-bold text-xs">
-              <ShieldCheck className="w-4 h-4" />
-              <span>STEP VERIFICATION REQUIRED</span>
-            </div>
-            <p className="text-xs text-slate-300">
-              The CAD solid has been compiled into your workspace IDE and rendered in the 3D viewport.
-            </p>
-
-            {isModifying ? (
+          <div className="p-3 rounded-xl bg-cyan/10 border border-cyan/30 space-y-2 animate-in zoom-in-95 select-text">
+            {isInsteadOpen ? (
               <div className="space-y-2">
-                <textarea
-                  placeholder="Describe adjustments (e.g. increase hole radius to 4mm, make wall 3mm thicker)..."
-                  value={modifyNote}
-                  onChange={(e) => setModifyNote(e.target.value)}
-                  className="w-full px-3 py-2 text-xs bg-surface border border-surface-border rounded-xl text-white placeholder:text-slate-500 focus:outline-none focus:border-cyan resize-none h-16"
+                <input
+                  type="text"
+                  placeholder="Describe what you want instead (e.g. make it 60mm wide)..."
+                  value={insteadNote}
+                  onChange={(e) => setInsteadNote(e.target.value)}
+                  className="w-full px-3 py-2 text-xs bg-surface border border-surface-border rounded-xl text-white placeholder:text-slate-500 focus:outline-none focus:border-cyan"
                   autoFocus
                 />
                 <div className="flex items-center justify-end gap-2">
                   <button
                     type="button"
-                    onClick={() => setIsModifying(false)}
+                    onClick={() => setIsInsteadOpen(false)}
                     className="px-3 py-1 text-xs text-slate-400 hover:text-white"
                   >
                     Cancel
@@ -642,83 +636,44 @@ export const AIChatPanel: React.FC<AIChatPanelProps> = ({ aiCad }) => {
                   <button
                     type="button"
                     onClick={() => {
-                      setIsModifying(false);
-                      verifyStep('Modify', modifyNote);
-                      setModifyNote('');
+                      setIsInsteadOpen(false);
+                      verifyStep('Modify', insteadNote);
+                      setInsteadNote('');
                     }}
-                    disabled={!modifyNote.trim()}
+                    disabled={!insteadNote.trim()}
                     className="px-3 py-1 rounded-lg bg-cyan text-black font-semibold text-xs disabled:opacity-50"
                   >
-                    Submit Modifications
+                    Submit
                   </button>
                 </div>
               </div>
             ) : (
-              <div className="flex items-center gap-2 pt-1">
+              <div className="flex items-center gap-2">
                 <button
                   type="button"
                   onClick={() => verifyStep('Yes')}
-                  className="flex-1 flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl bg-emerald hover:bg-emerald/90 text-white font-bold text-xs shadow-md shadow-emerald/20 transition-all"
+                  className="flex-1 flex items-center justify-center gap-1.5 py-1.5 px-3 rounded-xl bg-emerald hover:bg-emerald/90 text-white font-bold text-xs shadow-md shadow-emerald/20 transition-all"
                 >
                   <CheckCircle2 className="w-3.5 h-3.5" />
-                  <span>Yes (Looks Great)</span>
+                  <span>Yes (Apply)</span>
                 </button>
                 <button
                   type="button"
-                  onClick={() => setIsModifying(true)}
-                  className="flex-1 flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl bg-surface-subtle hover:bg-surface-border border border-surface-border text-white text-xs font-semibold transition-all"
+                  onClick={() => setIsInsteadOpen(true)}
+                  className="flex-1 flex items-center justify-center gap-1.5 py-1.5 px-3 rounded-xl bg-surface-subtle hover:bg-surface-border border border-surface-border text-white text-xs font-semibold transition-all"
                 >
                   <Edit3 className="w-3.5 h-3.5 text-cyan" />
-                  <span>Modify</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => verifyStep('No')}
-                  className="flex items-center justify-center p-2 rounded-xl bg-surface-subtle hover:bg-red-500/20 border border-surface-border hover:border-red-500/40 text-red-400 transition-all"
-                  title="Regenerate step"
-                >
-                  <RefreshCw className="w-3.5 h-3.5" />
+                  <span>No, instead...</span>
                 </button>
               </div>
             )}
           </div>
         )}
 
-        {/* 6. Export Phase Action Card */}
-        {phase === 'export' && (
-          <div className="p-4 rounded-2xl bg-emerald/10 border border-emerald/30 space-y-3 animate-in fade-in select-text">
-            <div className="flex items-center gap-2 text-emerald font-bold text-xs">
-              <CheckCircle2 className="w-4 h-4" />
-              <span>CAD MODEL READY FOR EXPORT</span>
-            </div>
-            <p className="text-xs text-slate-300">
-              Download your verified parametric B-Rep solid or 3D printing mesh:
-            </p>
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={() => handleExport('step')}
-                className="flex-1 flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl bg-cyan hover:bg-cyan-hover text-black font-bold text-xs shadow-md transition-all"
-              >
-                <Download className="w-3.5 h-3.5" />
-                <span>STEP (.step)</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => handleExport('stl')}
-                className="flex-1 flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl bg-surface-subtle hover:bg-surface-border border border-surface-border text-white font-semibold text-xs transition-all"
-              >
-                <Download className="w-3.5 h-3.5 text-emerald" />
-                <span>STL (.stl)</span>
-              </button>
-            </div>
-          </div>
-        )}
-
         <div ref={messagesEndRef} />
       </div>
 
-      {/* 7. Bottom Input Bar with File/Image Attachment Tray */}
+      {/* 6. Bottom Input Bar with File/Image Attachment Tray */}
       <div className="p-3 bg-surface-subtle/80 border-t border-surface-border shrink-0">
         {/* Hidden File Input */}
         <input
@@ -739,7 +694,7 @@ export const AIChatPanel: React.FC<AIChatPanelProps> = ({ aiCad }) => {
                 className="flex items-center gap-1.5 px-2 py-1 bg-surface-subtle border border-surface-border rounded-lg text-[10px] text-slate-200 font-mono"
               >
                 {att.dataUrl ? (
-                  <img src={att.dataUrl} alt={att.name} className="w-5 h-5 rounded object-cover" />
+                  <img src={att.dataUrl} alt={att.name} className="w-5 h-5 rounded object-contain bg-black/40" />
                 ) : (
                   <FileText className="w-3.5 h-3.5 text-cyan" />
                 )}
@@ -761,7 +716,7 @@ export const AIChatPanel: React.FC<AIChatPanelProps> = ({ aiCad }) => {
           <button
             type="button"
             onClick={() => fileInputRef.current?.click()}
-            title="Attach images (PNG, JPEG) or reference files (STEP, SVG, JSON, TXT)"
+            title="Attach images (PNG, JPEG), vector SVGs, or CAD reference files"
             className="w-8 h-8 rounded-xl bg-surface hover:bg-surface-border border border-surface-border text-slate-400 hover:text-cyan flex items-center justify-center transition-colors shrink-0"
           >
             <Paperclip className="w-4 h-4" />
@@ -772,7 +727,7 @@ export const AIChatPanel: React.FC<AIChatPanelProps> = ({ aiCad }) => {
             placeholder={
               attachments.length > 0
                 ? 'Add instructions for the attached file(s)...'
-                : 'Describe your part, paste an image (Ctrl+V), or type modifications...'
+                : 'Describe a part, ask a question, or paste image/SVG (Ctrl+V)...'
             }
             value={input}
             onChange={(e) => setInput(e.target.value)}
