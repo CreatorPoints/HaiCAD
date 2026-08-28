@@ -1,18 +1,13 @@
 import React, { useState } from 'react';
 import {
   Download,
-  Key,
-  Layers,
-  Sparkles,
-  ChevronDown,
   Box,
   SlidersHorizontal,
   Code2,
-  Cpu,
-  Bot,
   LayoutGrid,
   ChevronLeft,
   Edit2,
+  ChevronDown,
 } from 'lucide-react';
 import { SidebarTab } from './sidebar/LeftSidebar';
 
@@ -21,10 +16,6 @@ interface HeaderNavbarProps {
   activeTab: SidebarTab | null;
   onExport: (format: 'step' | 'stl') => void;
   isExporting: boolean;
-  activeKeysCount: number;
-  rateLimitedCount: number;
-  isChatOpen?: boolean;
-  onToggleChat?: () => void;
   projectName?: string;
   projectId?: string;
   onGoToDashboard?: () => void;
@@ -36,10 +27,6 @@ export const HeaderNavbar: React.FC<HeaderNavbarProps> = ({
   activeTab,
   onExport,
   isExporting,
-  activeKeysCount,
-  rateLimitedCount,
-  isChatOpen = true,
-  onToggleChat,
   projectName,
   projectId,
   onGoToDashboard,
@@ -147,23 +134,10 @@ export const HeaderNavbar: React.FC<HeaderNavbarProps> = ({
             <Code2 className="w-3.5 h-3.5" />
             <span>CAD Script IDE</span>
           </button>
-
-          <button
-            type="button"
-            onClick={() => onOpenTab('byok')}
-            className={`flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-xs font-medium transition-all ${
-              activeTab === 'byok'
-                ? 'bg-primary/20 text-primary-glow border border-primary/40'
-                : 'text-slate-300 hover:text-white hover:bg-surface-subtle border border-transparent'
-            }`}
-          >
-            <Key className="w-3.5 h-3.5 text-primary" />
-            <span>BYOK Vault</span>
-          </button>
         </div>
       </div>
 
-      {/* Right Controls (Export, BYOK Vault, AI Chat Toggle, GitHub) */}
+      {/* Right Controls (Export, GitHub) */}
       <div className="flex items-center gap-2.5">
         {/* Export Dropdown */}
         <div className="relative">
@@ -171,7 +145,7 @@ export const HeaderNavbar: React.FC<HeaderNavbarProps> = ({
             type="button"
             onClick={() => setShowExportMenu(!showExportMenu)}
             disabled={isExporting}
-            className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold shadow-md shadow-emerald-900/30 transition-all disabled:opacity-50"
+            className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold shadow-md shadow-emerald-900/30 transition-all disabled:opacity-50 cursor-pointer"
           >
             <Download className="w-3.5 h-3.5" />
             <span>{isExporting ? 'Exporting...' : 'Export CAD'}</span>
@@ -189,7 +163,7 @@ export const HeaderNavbar: React.FC<HeaderNavbarProps> = ({
                   onExport('step');
                   setShowExportMenu(false);
                 }}
-                className="w-full flex items-center justify-between px-3 py-2 rounded-lg text-xs text-slate-200 hover:bg-surface-subtle hover:text-white transition-all text-left"
+                className="w-full flex items-center justify-between px-3 py-2 rounded-lg text-xs text-slate-200 hover:bg-surface-subtle hover:text-white transition-all text-left cursor-pointer"
               >
                 <div>
                   <div className="font-semibold text-white">STEP (.step)</div>
@@ -206,7 +180,7 @@ export const HeaderNavbar: React.FC<HeaderNavbarProps> = ({
                   onExport('stl');
                   setShowExportMenu(false);
                 }}
-                className="w-full flex items-center justify-between px-3 py-2 rounded-lg text-xs text-slate-200 hover:bg-surface-subtle hover:text-white transition-all text-left"
+                className="w-full flex items-center justify-between px-3 py-2 rounded-lg text-xs text-slate-200 hover:bg-surface-subtle hover:text-white transition-all text-left cursor-pointer"
               >
                 <div>
                   <div className="font-semibold text-white">STL (.stl)</div>
@@ -219,44 +193,6 @@ export const HeaderNavbar: React.FC<HeaderNavbarProps> = ({
             </div>
           )}
         </div>
-
-        {/* BYOK Keys Vault Button */}
-        <button
-          type="button"
-          onClick={() => onOpenTab('byok')}
-          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs font-medium transition-all ${
-            rateLimitedCount > 0
-              ? 'bg-amber-500/15 border-amber-500/50 text-amber-300 animate-pulse'
-              : activeKeysCount > 0
-              ? 'bg-surface-subtle border-surface-border text-slate-300 hover:text-white hover:border-slate-500'
-              : 'bg-amber-500/10 border-amber-500/40 text-amber-300 animate-pulse'
-          }`}
-        >
-          <Key className="w-3.5 h-3.5 text-primary-glow" />
-          <span>
-            {rateLimitedCount > 0
-              ? `BYOK (${activeKeysCount}) ⚠️`
-              : activeKeysCount > 0
-              ? `BYOK Vault (${activeKeysCount})`
-              : 'Set BYOK Keys'}
-          </span>
-        </button>
-
-        {/* AI Chat Area Toggle Button */}
-        {onToggleChat && (
-          <button
-            type="button"
-            onClick={onToggleChat}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs font-medium transition-all ${
-              isChatOpen
-                ? 'bg-primary/20 border-primary text-white shadow-md shadow-primary/20'
-                : 'bg-surface-subtle border-surface-border text-slate-400 hover:text-white hover:border-slate-500'
-            }`}
-          >
-            <Bot className="w-3.5 h-3.5 text-cyan" />
-            <span>AI Chat</span>
-          </button>
-        )}
 
         {/* GitHub Link */}
         <a

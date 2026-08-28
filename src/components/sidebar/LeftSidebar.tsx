@@ -2,33 +2,20 @@ import React from 'react';
 import {
   SlidersHorizontal,
   Code2,
-  Sparkles,
-  Key,
-  Layers,
   ChevronLeft,
   ChevronRight,
   X,
-  ShieldCheck,
-  Cpu,
-  Eye,
-  AlertTriangle,
   Play,
   Copy,
   Check,
   AlertCircle,
-  FolderTree,
-  ArrowRight,
 } from 'lucide-react';
 import Editor from '@monaco-editor/react';
 import { ViewToolsPanel } from './ViewToolsPanel';
-import { BYOKPanel } from './BYOKPanel';
-import { FreeModelsPanel } from './FreeModelsPanel';
 import { RenderMode } from '../CADViewport';
 import { WorkerMeshOutput } from '../../cad/cadClient';
-import { APIKeyEntry, AIModelOption } from '../../services/aiService';
-import { PRESETS, CADPreset } from '../../cad/presets';
 
-export type SidebarTab = 'view_tools' | 'ide' | 'byok';
+export type SidebarTab = 'view_tools' | 'ide';
 
 interface LeftSidebarProps {
   activeTab: SidebarTab | null;
@@ -53,9 +40,6 @@ interface LeftSidebarProps {
   onRunCode: () => void;
   isBuilding: boolean;
   errorMessage?: string | null;
-  // BYOK props
-  keyPool: APIKeyEntry[];
-  onUpdateKeyPool: (newPool: APIKeyEntry[]) => void;
 }
 
 export const LeftSidebar: React.FC<LeftSidebarProps> = ({
@@ -79,8 +63,6 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({
   onRunCode,
   isBuilding,
   errorMessage,
-  keyPool,
-  onUpdateKeyPool,
 }) => {
   const [copied, setCopied] = React.useState(false);
 
@@ -91,25 +73,14 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({
   };
 
   const isDrawerOpen = activeTab !== null;
-  const activeKeysCount = keyPool.filter((k) => k.isActive).length;
-  const rateLimitedKeysCount = keyPool.filter((k) => k.isRateLimited && (k.rateLimitedUntil || 0) > Date.now()).length;
 
   const tabsConfig: Array<{
     id: SidebarTab;
     label: string;
     icon: React.ComponentType<{ className?: string }>;
-    badge?: string | number;
-    badgeColor?: string;
   }> = [
     { id: 'view_tools', label: 'View & Geometry Tools', icon: SlidersHorizontal },
     { id: 'ide', label: 'CAD Script IDE', icon: Code2 },
-    {
-      id: 'byok',
-      label: 'BYOK Key Vault',
-      icon: Key,
-      badge: rateLimitedKeysCount > 0 ? `!` : activeKeysCount > 0 ? `${activeKeysCount}` : undefined,
-      badgeColor: rateLimitedKeysCount > 0 ? 'bg-amber-500 text-slate-950 font-bold animate-pulse' : 'bg-primary/30 text-primary-glow',
-    },
   ];
 
   return (
@@ -134,17 +105,6 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({
                 }`}
               >
                 <Icon className="w-5 h-5" />
-
-                {/* Optional Badge */}
-                {tab.badge !== undefined && (
-                  <span
-                    className={`absolute -top-1 -right-1 text-[9px] px-1 py-0.2 rounded-full border border-surface shadow-sm ${
-                      tab.badgeColor || 'bg-primary text-white'
-                    }`}
-                  >
-                    {tab.badge}
-                  </span>
-                )}
               </button>
             );
           })}
@@ -171,12 +131,10 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({
             <div className="flex items-center gap-2">
               {activeTab === 'view_tools' && <SlidersHorizontal className="w-4 h-4 text-cyan" />}
               {activeTab === 'ide' && <Code2 className="w-4 h-4 text-primary" />}
-              {activeTab === 'byok' && <Key className="w-4 h-4 text-primary" />}
 
               <h2 className="text-xs font-bold uppercase tracking-wider text-white">
                 {activeTab === 'view_tools' && '3D Viewport & Geometry Tools'}
                 {activeTab === 'ide' && 'Parametric CAD Script IDE'}
-                {activeTab === 'byok' && 'BYOK Vault & Key Rotation'}
               </h2>
             </div>
 
@@ -276,14 +234,6 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({
                   </div>
                 )}
               </div>
-            )}
-
-            {/* BYOK VAULT & KEY POOL */}
-            {activeTab === 'byok' && (
-              <BYOKPanel
-                keyPool={keyPool}
-                onUpdateKeyPool={onUpdateKeyPool}
-              />
             )}
           </div>
         </section>

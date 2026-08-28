@@ -6,14 +6,13 @@ import {
   Edit2,
   Search,
   Clock,
-  Sparkles,
   ArrowRight,
   Copy,
   Check,
-  Key,
+  Layers,
+  Code2,
 } from 'lucide-react';
 import { CADProject } from '../../services/projectService';
-import { APIKeyEntry } from '../../services/aiService';
 
 interface ProjectDashboardProps {
   projects: CADProject[];
@@ -21,8 +20,6 @@ interface ProjectDashboardProps {
   onCreateNewProject: (customName?: string) => void;
   onDeleteProject: (projectId: string) => void;
   onRenameProject: (projectId: string, newName: string) => void;
-  keyPool: APIKeyEntry[];
-  onOpenBYOK: () => void;
 }
 
 export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
@@ -31,15 +28,11 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
   onCreateNewProject,
   onDeleteProject,
   onRenameProject,
-  keyPool,
-  onOpenBYOK,
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [editingProjectId, setEditingProjectId] = useState<string | null>(null);
   const [editingName, setEditingName] = useState('');
   const [copiedId, setCopiedId] = useState<string | null>(null);
-
-  const activeKeysCount = keyPool.filter((k) => k.isActive).length;
 
   const filteredProjects = projects.filter(
     (p) =>
@@ -81,27 +74,13 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
             <div className="flex items-center gap-2">
               <span className="font-bold tracking-tight text-white text-lg">HaiCAD</span>
               <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-cyan/15 text-cyan-glow border border-cyan/30 font-bold">
-                Projects Studio
+                Parametric CAD Studio
               </span>
             </div>
           </div>
         </div>
 
         <div className="flex items-center gap-3">
-          <button
-            type="button"
-            onClick={onOpenBYOK}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-surface border border-surface-border text-xs text-slate-300 hover:text-white hover:border-primary/50 transition-all cursor-pointer"
-          >
-            <Key className="w-3.5 h-3.5 text-primary" />
-            <span>BYOK Vault</span>
-            {activeKeysCount > 0 && (
-              <span className="text-[10px] font-mono px-1.5 py-0.2 rounded bg-emerald/20 text-emerald-glow font-bold">
-                {activeKeysCount} Active
-              </span>
-            )}
-          </button>
-
           <button
             type="button"
             onClick={() => onCreateNewProject()}
@@ -119,14 +98,14 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
         <section className="p-6 md:p-8 rounded-3xl bg-gradient-to-br from-surface to-surface-subtle border border-surface-border/80 shadow-2xl relative overflow-hidden flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
           <div className="space-y-2 z-10 max-w-xl">
             <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-cyan/10 border border-cyan/30 text-cyan text-[11px] font-mono font-semibold">
-              <Sparkles className="w-3.5 h-3.5" />
-              <span>Procedural 3D CAD Projects</span>
+              <Layers className="w-3.5 h-3.5" />
+              <span>Parametric OpenCASCADE Solids</span>
             </div>
             <h1 className="text-2xl md:text-3xl font-extrabold text-white tracking-tight">
-              Design, Synthesize & Manage Parametric CAD
+              Design & Synthesize 3D CAD Models
             </h1>
             <p className="text-xs md:text-sm text-slate-400 leading-relaxed">
-              Every project has its own dedicated 3D workspace, OpenCASCADE Replicad script, and AI Copilot memory.
+              Every project runs with an isolated OpenCASCADE geometry kernel and high-performance Monaco CAD IDE.
             </p>
           </div>
 
@@ -136,37 +115,37 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
               <span className="text-cyan font-bold text-sm">{projects.length}</span>
             </div>
             <div className="px-4 py-2 rounded-2xl bg-background/80 border border-surface-border text-xs font-mono flex items-center gap-3">
-              <span className="text-slate-400">Default Router:</span>
-              <span className="text-emerald-glow font-bold text-sm">100% Free Tier</span>
+              <span className="text-slate-400">Engine:</span>
+              <span className="text-cyan font-bold text-sm">OpenCASCADE JS</span>
             </div>
           </div>
         </section>
 
-        {/* Search & Action Bar */}
-        <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
-          <div className="relative flex-1 max-w-md">
-            <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+        {/* Project Controls Bar */}
+        <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
+          <div className="relative w-full sm:w-80">
+            <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
             <input
               type="text"
+              placeholder="Search projects..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search projects by name or slug..."
-              className="w-full pl-9 pr-4 py-2.5 rounded-xl bg-surface border border-surface-border text-xs text-slate-100 placeholder-slate-500 focus:outline-none focus:border-cyan/50 transition-all"
+              className="w-full pl-9 pr-4 py-2 rounded-xl bg-surface border border-surface-border text-xs text-white placeholder-slate-500 focus:outline-none focus:border-cyan transition-colors"
             />
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 w-full sm:w-auto overflow-x-auto pb-1 sm:pb-0">
             <button
               type="button"
               onClick={() => onCreateNewProject('NEMA 17 Stepper Mount')}
-              className="px-3 py-1.5 rounded-xl bg-surface hover:bg-surface-subtle border border-surface-border text-xs text-slate-300 hover:text-white transition-all text-left font-mono text-[11px]"
+              className="px-3 py-1.5 rounded-xl bg-surface hover:bg-surface-subtle border border-surface-border text-xs text-slate-300 hover:text-white transition-all whitespace-nowrap cursor-pointer"
             >
               + NEMA Mount
             </button>
             <button
               type="button"
-              onClick={() => onCreateNewProject('PCB Enclosure Box')}
-              className="px-3 py-1.5 rounded-xl bg-surface hover:bg-surface-subtle border border-surface-border text-xs text-slate-300 hover:text-white transition-all text-left font-mono text-[11px]"
+              onClick={() => onCreateNewProject('Enclosure Box')}
+              className="px-3 py-1.5 rounded-xl bg-surface hover:bg-surface-subtle border border-surface-border text-xs text-slate-300 hover:text-white transition-all whitespace-nowrap cursor-pointer"
             >
               + Enclosure Box
             </button>
@@ -175,127 +154,123 @@ export const ProjectDashboard: React.FC<ProjectDashboardProps> = ({
 
         {/* Projects Grid */}
         {filteredProjects.length === 0 ? (
-          <div className="p-12 text-center rounded-3xl bg-surface/50 border border-dashed border-surface-border space-y-4">
+          <div className="py-16 text-center space-y-4 rounded-3xl bg-surface/40 border border-surface-border">
             <Box className="w-12 h-12 text-slate-600 mx-auto" />
             <div className="space-y-1">
-              <h3 className="text-base font-bold text-white">No CAD Projects Found</h3>
+              <h3 className="text-base font-bold text-white">No CAD projects found</h3>
               <p className="text-xs text-slate-400">
-                {searchQuery ? `No matches for "${searchQuery}"` : 'Create your first project to start modeling in 3D.'}
+                {searchQuery ? 'Try clearing your search query.' : 'Create your first 3D parametric CAD project to get started.'}
               </p>
             </div>
             <button
               type="button"
               onClick={() => onCreateNewProject()}
-              className="px-4 py-2 rounded-xl bg-primary hover:bg-primary-hover text-white text-xs font-bold shadow-md inline-flex items-center gap-2"
+              className="px-4 py-2 rounded-xl bg-primary hover:bg-primary-hover text-white text-xs font-semibold shadow-md transition-all inline-flex items-center gap-2 cursor-pointer"
             >
               <Plus className="w-4 h-4" />
-              <span>Create New Project</span>
+              <span>Create First Project</span>
             </button>
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-            {filteredProjects.map((project) => (
-              <div
-                key={project.id}
-                onClick={() => onOpenProject(project.id)}
-                className="group relative p-5 rounded-2xl bg-surface hover:bg-surface-subtle border border-surface-border hover:border-cyan/40 shadow-xl transition-all flex flex-col justify-between cursor-pointer space-y-4"
-              >
-                {/* Card Header */}
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <span className="text-[10px] font-mono px-2 py-0.5 rounded-md bg-cyan/10 text-cyan-glow border border-cyan/20 font-semibold">
-                      /project/{project.id}
-                    </span>
-                    <button
-                      type="button"
-                      onClick={(e) => handleCopyUrl(project.id, e)}
-                      title="Copy Direct Project URL"
-                      className="p-1 text-slate-400 hover:text-white rounded transition-colors"
-                    >
-                      {copiedId === project.id ? (
-                        <Check className="w-3.5 h-3.5 text-emerald" />
-                      ) : (
-                        <Copy className="w-3.5 h-3.5" />
-                      )}
-                    </button>
-                  </div>
+            {filteredProjects.map((project) => {
+              const isEditing = editingProjectId === project.id;
 
-                  {editingProjectId === project.id ? (
-                    <form
-                      onSubmit={(e) => handleSaveRename(project.id, e)}
-                      onClick={(e) => e.stopPropagation()}
-                      className="flex items-center gap-1.5"
-                    >
-                      <input
-                        type="text"
-                        value={editingName}
-                        onChange={(e) => setEditingName(e.target.value)}
-                        autoFocus
-                        className="w-full px-2 py-1 rounded bg-background border border-cyan/50 text-xs text-white focus:outline-none"
-                      />
-                      <button
-                        type="submit"
-                        className="px-2 py-1 rounded bg-primary text-white text-xs font-bold"
-                      >
-                        Save
-                      </button>
-                    </form>
-                  ) : (
-                    <div className="flex items-center justify-between">
-                      <h3 className="text-sm font-bold text-white group-hover:text-cyan transition-colors truncate">
-                        {project.name}
-                      </h3>
-                      <button
-                        type="button"
-                        onClick={(e) => handleStartRename(project, e)}
-                        title="Rename Project"
-                        className="opacity-0 group-hover:opacity-100 p-1 text-slate-400 hover:text-white rounded transition-opacity"
-                      >
-                        <Edit2 className="w-3 h-3" />
-                      </button>
+              return (
+                <div
+                  key={project.id}
+                  onClick={() => onOpenProject(project.id)}
+                  className="group relative p-5 rounded-2xl bg-surface hover:bg-surface-subtle border border-surface-border hover:border-cyan/50 shadow-xl transition-all flex flex-col justify-between cursor-pointer space-y-4"
+                >
+                  <div className="space-y-3">
+                    {/* Card Top Row */}
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="w-10 h-10 rounded-xl bg-cyan/10 border border-cyan/20 flex items-center justify-center text-cyan group-hover:scale-105 transition-transform shrink-0">
+                        <Box className="w-5 h-5" />
+                      </div>
+
+                      <div className="flex items-center gap-1 opacity-80 group-hover:opacity-100 transition-opacity">
+                        <button
+                          type="button"
+                          onClick={(e) => handleCopyUrl(project.id, e)}
+                          title="Copy Direct Project URL"
+                          className="p-1.5 rounded-lg hover:bg-background/80 text-slate-400 hover:text-cyan transition-colors"
+                        >
+                          {copiedId === project.id ? (
+                            <Check className="w-3.5 h-3.5 text-emerald" />
+                          ) : (
+                            <Copy className="w-3.5 h-3.5" />
+                          )}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={(e) => handleStartRename(project, e)}
+                          title="Rename Project"
+                          className="p-1.5 rounded-lg hover:bg-background/80 text-slate-400 hover:text-white transition-colors"
+                        >
+                          <Edit2 className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (window.confirm(`Delete project "${project.name}"?`)) {
+                              onDeleteProject(project.id);
+                            }
+                          }}
+                          title="Delete Project"
+                          className="p-1.5 rounded-lg hover:bg-red-500/20 text-slate-400 hover:text-red-400 transition-colors"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
                     </div>
-                  )}
 
-                  <p className="text-[11px] text-slate-400 line-clamp-2 leading-relaxed">
-                    {project.description || 'Parametric solid project'}
-                  </p>
-                </div>
+                    {/* Project Title / Inline Edit */}
+                    {isEditing ? (
+                      <form onSubmit={(e) => handleSaveRename(project.id, e)} className="space-y-1">
+                        <input
+                          type="text"
+                          value={editingName}
+                          onChange={(e) => setEditingName(e.target.value)}
+                          autoFocus
+                          onClick={(e) => e.stopPropagation()}
+                          onBlur={() => handleSaveRename(project.id)}
+                          className="w-full px-2 py-1 rounded bg-background border border-cyan text-xs font-bold text-white focus:outline-none"
+                        />
+                      </form>
+                    ) : (
+                      <div>
+                        <h3 className="text-sm font-bold text-white group-hover:text-cyan-glow transition-colors truncate">
+                          {project.name}
+                        </h3>
+                        <span className="text-[10px] font-mono text-slate-500">
+                          /project/{project.id}
+                        </span>
+                      </div>
+                    )}
 
-                {/* Code Snippet Preview */}
-                <div className="p-2.5 rounded-xl bg-background/90 border border-surface-border font-mono text-[10px] text-slate-400 line-clamp-3 leading-tight overflow-hidden">
-                  {project.code.slice(0, 120)}...
-                </div>
-
-                {/* Card Footer */}
-                <div className="pt-3 border-t border-surface-border/60 flex items-center justify-between text-xs">
-                  <div className="flex items-center gap-1 text-[10px] text-slate-400 font-mono">
-                    <Clock className="w-3 h-3 text-slate-500" />
-                    <span>{new Date(project.updatedAt).toLocaleDateString()}</span>
+                    {/* Code Preview snippet */}
+                    <div className="p-2.5 rounded-xl bg-background/90 border border-surface-border/80 font-mono text-[10px] text-slate-400 h-16 overflow-hidden select-none">
+                      <pre className="line-clamp-3 whitespace-pre-wrap">{project.code.slice(0, 140)}...</pre>
+                    </div>
                   </div>
 
-                  <div className="flex items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        if (confirm(`Delete project "${project.name}"?`)) {
-                          onDeleteProject(project.id);
-                        }
-                      }}
-                      title="Delete Project"
-                      className="opacity-0 group-hover:opacity-100 p-1 text-slate-500 hover:text-red-400 rounded transition-opacity"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
+                  {/* Card Bottom Meta */}
+                  <div className="pt-2 border-t border-surface-border/60 flex items-center justify-between text-[11px] text-slate-400 font-mono">
+                    <div className="flex items-center gap-1.5">
+                      <Clock className="w-3 h-3 text-slate-500" />
+                      <span>{new Date(project.updatedAt).toLocaleDateString()}</span>
+                    </div>
 
-                    <span className="flex items-center gap-1 text-xs font-semibold text-primary-glow group-hover:translate-x-0.5 transition-transform">
+                    <div className="flex items-center gap-1 text-cyan font-sans font-semibold group-hover:translate-x-0.5 transition-transform">
                       <span>Open Studio</span>
-                      <ArrowRight className="w-3.5 h-3.5" />
-                    </span>
+                      <ArrowRight className="w-3 h-3" />
+                    </div>
                   </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </main>

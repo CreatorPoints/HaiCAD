@@ -1,5 +1,3 @@
-import { ChatMessage } from '../components/chat/AIChatPanel';
-
 export interface CADProject {
   id: string;
   name: string;
@@ -7,8 +5,6 @@ export interface CADProject {
   createdAt: number;
   updatedAt: number;
   code: string;
-  messages: ChatMessage[];
-  selectedModel?: string;
   meshCount?: number;
 }
 
@@ -26,7 +22,7 @@ const NOUNS = [
   'adapter', 'pulley', 'actuator', 'strut', 'linkage', 'yoke'
 ];
 
-export const DEFAULT_PROJECT_CODE = `// Precision Parametric Solid
+export const DEFAULT_PROJECT_CODE = `// Precision Parametric Solid (Replicad / OpenCASCADE)
 const PARAMS = {
   width: 40,
   length: 40,
@@ -38,13 +34,10 @@ const PARAMS = {
 
 function main({ makeBox, makeCylinder }) {
   // Step 1: Base Plate Extrusion
-  // [PING: {"name": "Base Plate", "position": [0, 0, 2], "action": "Extruding flange"}]
   const base = makeBox(PARAMS.width, PARAMS.length, PARAMS.thickness);
 
   // Step 2: Center Bore Hole
-  // [PING: {"name": "Center Bore", "position": [0, 0, 0], "action": "Drilling through-hole"}]
   const centerHole = makeCylinder(PARAMS.centerBore / 2, PARAMS.thickness + 4).translate([0, 0, -2]);
-
   let solid = base.cut(centerHole);
 
   // Step 3: Bolt Pitch Circle Pattern
@@ -63,7 +56,7 @@ function main({ makeBox, makeCylinder }) {
 `;
 
 /**
- * Generates a cool procedural project name and ID
+ * Generates a procedural project name and ID
  */
 export function generateProceduralName(): { id: string; name: string } {
   const adj = ADJECTIVES[Math.floor(Math.random() * ADJECTIVES.length)];
@@ -75,7 +68,7 @@ export function generateProceduralName(): { id: string; name: string } {
 }
 
 /**
- * Direct raw read from localStorage without recursive side-effects
+ * Direct raw read from localStorage
  */
 function readRawProjects(): CADProject[] {
   try {
@@ -110,19 +103,10 @@ function createSeedProject(): CADProject {
   return {
     id: 'titanium-bracket-1001',
     name: 'Titanium Bracket #1001',
-    description: 'Precision parametric mounting bracket designed with HaiCAD Copilot',
+    description: 'Precision parametric mounting bracket designed in Replicad OpenCASCADE',
     createdAt: Date.now(),
     updatedAt: Date.now(),
     code: DEFAULT_PROJECT_CODE,
-    messages: [
-      {
-        id: 'sys_init_seed',
-        sender: 'system',
-        content: 'Welcome to HaiCAD! Start by customizing parameters or typing a prompt in the Copilot chat.',
-        timestamp: Date.now(),
-      },
-    ],
-    selectedModel: 'auto-smart',
     meshCount: 1,
   };
 }
@@ -136,7 +120,6 @@ export function loadAllProjects(): CADProject[] {
     return existing.sort((a, b) => b.updatedAt - a.updatedAt);
   }
 
-  // Seed default initial project
   const seed = createSeedProject();
   saveAllProjects([seed]);
   return [seed];
@@ -161,19 +144,10 @@ export function createProject(customName?: string, initialCode?: string, customI
   const newProject: CADProject = {
     id,
     name,
-    description: `Parametric CAD solid designed in HaiCAD Copilot`,
+    description: `Parametric CAD solid designed in HaiCAD Studio`,
     createdAt: Date.now(),
     updatedAt: Date.now(),
     code: initialCode || DEFAULT_PROJECT_CODE,
-    messages: [
-      {
-        id: 'sys_init_' + Date.now(),
-        sender: 'system',
-        content: `Created new project "${name}". Start by typing a prompt or editing the code.`,
-        timestamp: Date.now(),
-      },
-    ],
-    selectedModel: 'auto-smart',
     meshCount: 1,
   };
 
