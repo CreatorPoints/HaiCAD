@@ -463,6 +463,25 @@ export interface GenerateCADResult {
   routingDecision: RoutingDecision;
 }
 
+async function fetchWithTimeout(url: string, options: RequestInit, timeoutMs = 25000): Promise<Response> {
+  const controller = new AbortController();
+  const id = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const response = await fetch(url, {
+      ...options,
+      signal: controller.signal,
+    });
+    return response;
+  } catch (error: any) {
+    if (error.name === 'AbortError') {
+      throw new Error(`API request to model timed out after ${Math.round(timeoutMs / 1000)}s.`);
+    }
+    throw error;
+  } finally {
+    clearTimeout(id);
+  }
+}
+
 // Generate CAD code with automatic failover and key rotation
 export async function generateCADCode(params: GenerateCADParams): Promise<GenerateCADResult> {
   const {
@@ -522,6 +541,7 @@ export async function generateCADCode(params: GenerateCADParams): Promise<Genera
   const effectiveModel = routingDecision.modelId;
   const provider = routingDecision.provider;
 
+  console.log('[HaiCAD AI] Autonomous Routing:', routingDecision);
   onStepProgress?.(`Autonomous Routing: ${routingDecision.reason}...`);
 
   // Get active keys for this provider
@@ -574,7 +594,7 @@ export async function generateCADCode(params: GenerateCADParams): Promise<Genera
       if (provider === 'gemini') {
         let modelToCall = effectiveModel;
         let apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${modelToCall}:generateContent?key=${candidateKey.key.trim()}`;
-        let res = await fetch(apiUrl, {
+        let res = await fetchWithTimeout(apiUrl, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -584,7 +604,7 @@ export async function generateCADCode(params: GenerateCADParams): Promise<Genera
               maxOutputTokens: 4096,
             },
           }),
-        });
+        }, 20000);
 
         // If model hit limit:0, rate limit (429), or error, auto-cascade through verified working free tier flash endpoints
         if (!res.ok) {
@@ -594,7 +614,7 @@ export async function generateCADCode(params: GenerateCADParams): Promise<Genera
             onStepProgress?.(`Auto-fallback to ${fallbackModel} (Free Tier)...`);
             modelToCall = fallbackModel;
             apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${modelToCall}:generateContent?key=${candidateKey.key.trim()}`;
-            res = await fetch(apiUrl, {
+            res = await fetchWithTimeout(apiUrl, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
@@ -604,7 +624,7 @@ export async function generateCADCode(params: GenerateCADParams): Promise<Genera
                   maxOutputTokens: 4096,
                 },
               }),
-            });
+            }, 20000);
             if (res.ok) break;
           }
         }
@@ -625,7 +645,7 @@ export async function generateCADCode(params: GenerateCADParams): Promise<Genera
         textResponse = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
       } else {
         // OpenRouter
-        const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+        const res = await fetchWithTimeout('https://openrouter.ai/api/v1/chat/completions', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -641,7 +661,7 @@ export async function generateCADCode(params: GenerateCADParams): Promise<Genera
             ],
             temperature: 0.2,
           }),
-        });
+        }, 25000);
 
         if (!res.ok) {
           const errJson = await res.json().catch(() => ({}));

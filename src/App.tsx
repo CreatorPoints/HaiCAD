@@ -150,90 +150,113 @@ export const App: React.FC = () => {
       });
 
       setLastUsedKeyLabel(result.usedKeyLabel);
-      setCurrentStep('Synthesizing 3D OpenCASCADE solid...');
-      setCode(result.code);
-      if (result.pings.length > 0) {
-        setActivePings(result.pings);
-      }
 
-      // Compile new code
-      const evalRes = await cadClient.evaluateCode(result.code);
-      if (evalRes.success && evalRes.meshes) {
-        setMeshes(evalRes.meshes);
-        setErrorMessage(null);
-        setCurrentStep('Model successfully compiled!');
+      const isQuestionOrExplanation =
+        result.routingDecision.taskAnalysis.mode === 'QUESTION_EXPLANATION' ||
+        !result.code.includes('function main');
 
-        // Add Assistant Success Message to Chat Feed
+      if (isQuestionOrExplanation) {
+        // Direct engineering or conversational explanation
+        setCurrentStep('Explanation ready!');
         setMessages((prev) => [
           ...prev,
           {
             id: 'asst_' + Date.now(),
             sender: 'assistant',
-            content: `Geometry generated successfully using ${result.routingDecision.modelName}.`,
+            content: result.rawResponse || result.code,
             timestamp: Date.now(),
             routingDecision: result.routingDecision,
-            steps: result.steps,
-            pings: result.pings,
-            codeSnippet: result.code,
+            steps: result.steps.length > 0 ? result.steps : [result.routingDecision.reason],
             usedKeyLabel: result.usedKeyLabel,
           },
         ]);
       } else {
-        // Auto-fix attempt if error occurs (Self-healing loop)
-        setCurrentStep('Self-healing CAD geometry compilation error...');
-        setErrorMessage(evalRes.error || 'Initial build error');
+        // 3D CAD Geometry Synthesis
+        setCurrentStep('Synthesizing 3D OpenCASCADE solid...');
+        setCode(result.code);
+        if (result.pings.length > 0) {
+          setActivePings(result.pings);
+        }
 
-        const fixResult = await generateCADCode({
-          prompt: `The previous code produced this error: "${evalRes.error}". Please fix the issue and return working Replicad code. Original prompt was: ${prompt}`,
-          currentCode: result.code,
-          model: modelToUse,
-          keyPool,
-          onStepProgress: (step) => setCurrentStep(step),
-          onKeyRotated: (event) => {
-            setRotationToast(event);
-          },
-          onKeyPoolUpdated: (updatedPool) => {
-            setKeyPool(updatedPool);
-          },
-        });
-
-        setCode(fixResult.code);
-        const secondEval = await cadClient.evaluateCode(fixResult.code);
-        if (secondEval.success && secondEval.meshes) {
-          setMeshes(secondEval.meshes);
+        // Compile new code
+        const evalRes = await cadClient.evaluateCode(result.code);
+        if (evalRes.success && evalRes.meshes) {
+          setMeshes(evalRes.meshes);
           setErrorMessage(null);
-          setCurrentStep('Self-healed and rendered!');
+          setCurrentStep('Model successfully compiled!');
 
+          // Add Assistant Success Message to Chat Feed
           setMessages((prev) => [
             ...prev,
             {
               id: 'asst_' + Date.now(),
               sender: 'assistant',
-              content: `Geometry self-healed and compiled successfully after resolving OpenCASCADE kernel error.`,
+              content: `Geometry generated successfully using ${result.routingDecision.modelName}.`,
               timestamp: Date.now(),
-              routingDecision: fixResult.routingDecision,
-              steps: fixResult.steps,
-              pings: fixResult.pings,
-              codeSnippet: fixResult.code,
-              usedKeyLabel: fixResult.usedKeyLabel,
+              routingDecision: result.routingDecision,
+              steps: result.steps.length > 0 ? result.steps : [`Calculated parametric features with ${result.routingDecision.modelName}`],
+              pings: result.pings,
+              codeSnippet: result.code,
+              usedKeyLabel: result.usedKeyLabel,
             },
           ]);
         } else {
-          const failErr = secondEval.error || 'Build failed after self-healing';
-          setErrorMessage(failErr);
+          // Auto-fix attempt if error occurs (Self-healing loop)
+          setCurrentStep('Self-healing CAD geometry compilation error...');
+          setErrorMessage(evalRes.error || 'Initial build error');
 
-          setMessages((prev) => [
-            ...prev,
-            {
-              id: 'asst_' + Date.now(),
-              sender: 'assistant',
-              content: `Failed to compile geometry: ${failErr}`,
-              timestamp: Date.now(),
-              isError: true,
-              errorMessage: failErr,
-              codeSnippet: fixResult.code,
+          const fixResult = await generateCADCode({
+            prompt: `The previous code produced this error: "${evalRes.error}". Please fix the issue and return working Replicad code. Original prompt was: ${prompt}`,
+            currentCode: result.code,
+            model: modelToUse,
+            keyPool,
+            onStepProgress: (step) => setCurrentStep(step),
+            onKeyRotated: (event) => {
+              setRotationToast(event);
             },
-          ]);
+            onKeyPoolUpdated: (updatedPool) => {
+              setKeyPool(updatedPool);
+            },
+          });
+
+          setCode(fixResult.code);
+          const secondEval = await cadClient.evaluateCode(fixResult.code);
+          if (secondEval.success && secondEval.meshes) {
+            setMeshes(secondEval.meshes);
+            setErrorMessage(null);
+            setCurrentStep('Self-healed and rendered!');
+
+            setMessages((prev) => [
+              ...prev,
+              {
+                id: 'asst_' + Date.now(),
+                sender: 'assistant',
+                content: `Geometry self-healed and compiled successfully after resolving OpenCASCADE kernel error.`,
+                timestamp: Date.now(),
+                routingDecision: fixResult.routingDecision,
+                steps: fixResult.steps,
+                pings: fixResult.pings,
+                codeSnippet: fixResult.code,
+                usedKeyLabel: fixResult.usedKeyLabel,
+              },
+            ]);
+          } else {
+            const failErr = secondEval.error || 'Build failed after self-healing';
+            setErrorMessage(failErr);
+
+            setMessages((prev) => [
+              ...prev,
+              {
+                id: 'asst_' + Date.now(),
+                sender: 'assistant',
+                content: `Failed to compile geometry: ${failErr}`,
+                timestamp: Date.now(),
+                isError: true,
+                errorMessage: failErr,
+                codeSnippet: fixResult.code,
+              },
+            ]);
+          }
         }
       }
 
