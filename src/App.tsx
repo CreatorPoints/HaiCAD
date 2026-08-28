@@ -17,6 +17,7 @@ import {
   fetchGeminiModels,
   extractExecutableCode,
   KeyRotationEvent,
+  AttachedAsset,
 } from './services/aiService';
 import {
   CADProject,
@@ -170,13 +171,12 @@ export const App: React.FC = () => {
   };
 
   // AI Chat Generation Handler
-  const handleGenerate = async (prompt: string, modelToUse: string) => {
+  const handleGenerate = async (prompt: string, modelToUse: string, assets?: AttachedAsset[]) => {
     setIsGenerating(true);
-    setCurrentStep('Analyzing task intent & geometry constraints...');
-    setActivePings([]);
+    setErrorMessage(null);
+    setCurrentStep(assets && assets.length > 0 ? 'Analyzing attached drawing / blueprint...' : 'Analyzing intent & geometric constraints...');
 
-    // Add user message to conversation history
-    const userMsgId = 'usr_' + Date.now();
+    const userMsgId = 'user_' + Date.now();
     setMessages((prev) => [
       ...prev,
       {
@@ -184,6 +184,7 @@ export const App: React.FC = () => {
         sender: 'user',
         content: prompt,
         timestamp: Date.now(),
+        attachments: assets,
       },
     ]);
 
@@ -192,6 +193,7 @@ export const App: React.FC = () => {
         prompt,
         currentCode: code,
         model: modelToUse,
+        assets,
         keyPool,
         onStepProgress: (step) => {
           setCurrentStep(step);

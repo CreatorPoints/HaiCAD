@@ -1,5 +1,7 @@
 import { routeOptimalModel, RoutingDecision } from './modelRouter';
 import { performWebSearch, extractSearchableQuery, WebSearchResult } from './webSearchService';
+import { AttachedAsset, formatFileSize } from './assetService';
+export type { AttachedAsset };
 
 export interface AIPingLocation {
   id: string;
@@ -519,6 +521,7 @@ export interface GenerateCADParams {
   prompt: string;
   currentCode?: string;
   model: string;
+  assets?: AttachedAsset[];
   keyPool?: APIKeyEntry[];
   geminiKey?: string;
   openrouterKey?: string;
@@ -919,6 +922,19 @@ export async function generateCADCode(params: GenerateCADParams): Promise<Genera
     }
   }
 
+  // Multimodal Attached Assets Tool Call logging & content preparation
+  if (params.assets && params.assets.length > 0) {
+    for (const asset of params.assets) {
+      const toolEvent: ToolCallEvent = {
+        toolName: 'AssetInspection',
+        query: asset.name,
+        outputSummary: `Attached ${asset.category} (${asset.type}, ${formatFileSize(asset.size)}). Inspecting blueprint/datasheet visual geometry & constraints.`,
+      };
+      toolCalls.push(toolEvent);
+      params.onToolCall?.(toolEvent);
+    }
+  }
+
   let userContent = `User Request: ${prompt}`;
   if (webHit) {
     userContent = `[GROUNDED LIVE WEB SPECS - ${webHit.title}]\nSource: ${webHit.sourceUrl}\nVerified Standards & Dimensions:\n${webHit.snippet}\n\nUse these exact dimensions for your design.\n\n${userContent}`;
@@ -930,6 +946,48 @@ export async function generateCADCode(params: GenerateCADParams): Promise<Genera
 
   // Combine base system prompt with task-specific custom directives
   const fullSystemPrompt = `${BASE_SYSTEM_PROMPT}\n\n${routingDecision.customInstructions}`;
+
+  // Prepare Gemini multimodal parts
+  const geminiUserParts: any[] = [];
+  if (params.assets && params.assets.length > 0) {
+    for (const asset of params.assets) {
+      if (asset.category === 'image') {
+        const base64Data = asset.dataUrl.includes(',') ? asset.dataUrl.split(',')[1] : asset.dataUrl;
+        geminiUserParts.push({
+          inlineData: {
+            mimeType: asset.type || 'image/png',
+            data: base64Data,
+          },
+        });
+      } else if (asset.textContent) {
+        geminiUserParts.push({
+          text: `[ATTACHED ASSET / DATASHEET: ${asset.name}]\n${asset.textContent}\n`,
+        });
+      }
+    }
+  }
+  geminiUserParts.push({ text: `${fullSystemPrompt}\n\n${userContent}` });
+
+  // Prepare OpenRouter multimodal content
+  let orUserContent: any = userContent;
+  if (params.assets && params.assets.length > 0) {
+    const orParts: any[] = [];
+    for (const asset of params.assets) {
+      if (asset.category === 'image') {
+        orParts.push({
+          type: 'image_url',
+          image_url: { url: asset.dataUrl },
+        });
+      } else if (asset.textContent) {
+        orParts.push({
+          type: 'text',
+          text: `[ATTACHED ASSET / DATASHEET: ${asset.name}]\n${asset.textContent}\n`,
+        });
+      }
+    }
+    orParts.push({ type: 'text', text: userContent });
+    orUserContent = orParts;
+  }
 
   let textResponse = '';
   let successfulKey: APIKeyEntry | null = null;
@@ -979,7 +1037,7 @@ export async function generateCADCode(params: GenerateCADParams): Promise<Genera
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            contents: [{ role: 'user', parts: [{ text: `${fullSystemPrompt}\n\n${userContent}` }] }],
+            contents: [{ role: 'user', parts: geminiUserParts }],
             generationConfig: {
               temperature: 0.2,
               maxOutputTokens: 4096,
@@ -999,7 +1057,7 @@ export async function generateCADCode(params: GenerateCADParams): Promise<Genera
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
-                contents: [{ role: 'user', parts: [{ text: `${fullSystemPrompt}\n\n${userContent}` }] }],
+                contents: [{ role: 'user', parts: geminiUserParts }],
                 generationConfig: {
                   temperature: 0.2,
                   maxOutputTokens: 4096,
@@ -1043,7 +1101,7 @@ export async function generateCADCode(params: GenerateCADParams): Promise<Genera
             },
             messages: [
               { role: 'system', content: fullSystemPrompt },
-              { role: 'user', content: userContent },
+              { role: 'user', content: orUserContent },
             ],
             temperature: 0.2,
           }),
@@ -1078,7 +1136,7 @@ export async function generateCADCode(params: GenerateCADParams): Promise<Genera
                 },
                 messages: [
                   { role: 'system', content: fullSystemPrompt },
-                  { role: 'user', content: userContent },
+                  { role: 'user', content: orUserContent },
                 ],
                 temperature: 0.2,
               }),

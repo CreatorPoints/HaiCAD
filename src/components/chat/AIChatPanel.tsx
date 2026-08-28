@@ -28,6 +28,11 @@ import {
   Sliders,
   Terminal,
   ExternalLink,
+  Paperclip,
+  Image as ImageIcon,
+  FileText,
+  X,
+  FileUp,
 } from 'lucide-react';
 import {
   DEFAULT_MODELS,
@@ -38,8 +43,12 @@ import {
   ClarificationQuestion,
   ToolCallEvent,
 } from '../../services/aiService';
+import {
+  AttachedAsset,
+  processUploadedFile,
+  formatFileSize,
+} from '../../services/assetService';
 import { RoutingDecision, TaskMode } from '../../services/modelRouter';
-import { CADPreset } from '../../cad/presets';
 
 export interface ChatMessage {
   id: string;
@@ -57,11 +66,12 @@ export interface ChatMessage {
   toolCalls?: ToolCallEvent[];
   clarification?: ClarificationQuestion;
   paramsSummary?: Record<string, number>;
+  attachments?: AttachedAsset[];
 }
 
 interface AIChatPanelProps {
   messages: ChatMessage[];
-  onSendMessage: (prompt: string, modelId: string) => Promise<void>;
+  onSendMessage: (prompt: string, modelId: string, assets?: AttachedAsset[]) => Promise<void>;
   isGenerating: boolean;
   currentStep: string;
   activePings: AIPingLocation[];
@@ -94,13 +104,57 @@ export const AIChatPanel: React.FC<AIChatPanelProps> = ({
   const [showModelPicker, setShowModelPicker] = useState(false);
   const [copiedCodeId, setCopiedCodeId] = useState<string | null>(null);
   const [expandedThoughts, setExpandedThoughts] = useState<Record<string, boolean>>({});
+  const [attachedAssets, setAttachedAssets] = useState<AttachedAsset[]>([]);
+  const [isDragging, setIsDragging] = useState(false);
+
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   const toggleThought = (id: string) => {
     setExpandedThoughts((prev) => ({ ...prev, [id]: !prev[id] }));
   };
 
-  const messagesEndRef = useRef<HTMLDivElement>(null);
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const handleFileUpload = async (files: FileList | File[]) => {
+    const list = Array.from(files);
+    for (const file of list) {
+      try {
+        const asset = await processUploadedFile(file);
+        setAttachedAssets((prev) => [...prev, asset]);
+      } catch (err) {
+        console.warn('Failed to process uploaded file:', err);
+      }
+    }
+  };
+
+  const removeAsset = (assetId: string) => {
+    setAttachedAssets((prev) => prev.filter((a) => a.id !== assetId));
+  };
+
+  const handlePaste = async (e: React.ClipboardEvent) => {
+    if (e.clipboardData.files && e.clipboardData.files.length > 0) {
+      e.preventDefault();
+      await handleFileUpload(e.clipboardData.files);
+    }
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(true);
+  };
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(false);
+  };
+
+  const handleDrop = async (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(false);
+    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+      await handleFileUpload(e.dataTransfer.files);
+    }
+  };
 
   // Auto-scroll to bottom on new messages or progress updates
   useEffect(() => {
@@ -111,10 +165,16 @@ export const AIChatPanel: React.FC<AIChatPanelProps> = ({
   const handleSubmit = (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     const trimmed = prompt.trim();
-    if (!trimmed || isGenerating) return;
+    if ((!trimmed && attachedAssets.length === 0) || isGenerating) return;
 
-    onSendMessage(trimmed, selectedModel);
+    const assetsToSend = attachedAssets.length > 0 ? [...attachedAssets] : undefined;
+    const promptToSend =
+      trimmed ||
+      'Please analyze the attached asset(s) (blueprint, drawing, or datasheet) and generate the complete parametric 3D CAD model based on its dimensions and geometry.';
+
+    onSendMessage(promptToSend, selectedModel, assetsToSend);
     setPrompt('');
+    setAttachedAssets([]);
 
     // Reset textarea height
     if (textareaRef.current) {
@@ -385,6 +445,38 @@ export const AIChatPanel: React.FC<AIChatPanelProps> = ({
                     : 'bg-surface-subtle border-surface-border text-slate-200 rounded-tl-sm shadow-md'
                 }`}
               >
+                {/* Attached Assets in User Message */}
+                {isUser && msg.attachments && msg.attachments.length > 0 && (
+                  <div className="flex flex-wrap gap-2 pt-0.5">
+                    {msg.attachments.map((att) => (
+                      <div
+                        key={att.id}
+                        className="p-1.5 rounded-xl bg-background/90 border border-primary/40 flex items-center gap-2 max-w-full overflow-hidden shadow-sm"
+                      >
+                        {att.category === 'image' ? (
+                          <img
+                            src={att.dataUrl}
+                            alt={att.name}
+                            className="w-12 h-12 object-cover rounded-lg shrink-0 border border-surface-border"
+                          />
+                        ) : (
+                          <div className="w-9 h-9 rounded-lg bg-cyan/15 flex items-center justify-center shrink-0 text-cyan">
+                            <FileText className="w-4 h-4" />
+                          </div>
+                        )}
+                        <div className="flex flex-col text-[10px] min-w-0 pr-1">
+                          <span className="font-semibold text-slate-200 truncate max-w-[140px]">
+                            {att.name}
+                          </span>
+                          <span className="text-slate-400 font-mono text-[9px]">
+                            {formatFileSize(att.size)} • {att.category}
+                          </span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
                 {/* Content Text */}
                 {(() => {
                   if (isUser) {
@@ -652,9 +744,62 @@ export const AIChatPanel: React.FC<AIChatPanelProps> = ({
       </div>
 
       {/* 4. Chat Input & Quick Suggestion Bar */}
-      <div className="p-3 border-t border-surface-border bg-surface-subtle/50 space-y-2 shrink-0">
-        {/* Quick Suggestion Chips (when idle) */}
-        {!isGenerating && (
+      <div
+        onDragOver={handleDragOver}
+        onDragLeave={handleDragLeave}
+        onDrop={handleDrop}
+        className={`p-3 border-t border-surface-border bg-surface-subtle/50 space-y-2 shrink-0 relative transition-all ${
+          isDragging ? 'bg-cyan/10 border-cyan' : ''
+        }`}
+      >
+        {/* Drag & Drop Overlay Indicator */}
+        {isDragging && (
+          <div className="absolute inset-0 bg-background/90 border-2 border-dashed border-cyan rounded-xl z-20 flex flex-col items-center justify-center gap-1.5 backdrop-blur-sm pointer-events-none">
+            <FileUp className="w-6 h-6 text-cyan animate-bounce" />
+            <span className="text-xs font-bold text-cyan-glow font-mono">
+              Drop blueprint, drawing, or datasheet here
+            </span>
+          </div>
+        )}
+
+        {/* Attached Assets Tray */}
+        {attachedAssets.length > 0 && (
+          <div className="flex flex-wrap gap-2 p-2 rounded-xl bg-surface border border-surface-border animate-in fade-in">
+            {attachedAssets.map((att) => (
+              <div
+                key={att.id}
+                className="relative group p-1.5 rounded-xl bg-background border border-cyan/40 flex items-center gap-2 shadow-sm"
+              >
+                {att.category === 'image' ? (
+                  <img
+                    src={att.dataUrl}
+                    alt={att.name}
+                    className="w-9 h-9 object-cover rounded-lg shrink-0 border border-surface-border"
+                  />
+                ) : (
+                  <div className="w-8 h-8 rounded-lg bg-cyan/10 flex items-center justify-center shrink-0 text-cyan">
+                    <FileText className="w-4 h-4" />
+                  </div>
+                )}
+                <div className="flex flex-col text-[10px] min-w-0 pr-4">
+                  <span className="font-semibold text-white truncate max-w-[120px]">{att.name}</span>
+                  <span className="text-slate-400 font-mono text-[9px]">{formatFileSize(att.size)}</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => removeAsset(att.id)}
+                  title="Remove attachment"
+                  className="absolute -top-1.5 -right-1.5 w-4 h-4 rounded-full bg-red-500 hover:bg-red-400 text-white flex items-center justify-center text-[10px] shadow transition-colors cursor-pointer"
+                >
+                  <X className="w-2.5 h-2.5" />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Quick Suggestion Chips (when idle & no assets) */}
+        {!isGenerating && attachedAssets.length === 0 && (
           <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar pb-1">
             <span className="text-[10px] text-slate-500 shrink-0 flex items-center gap-0.5">
               <Wand2 className="w-3 h-3 text-primary-glow" /> Quick:
@@ -677,20 +822,47 @@ export const AIChatPanel: React.FC<AIChatPanelProps> = ({
 
         {/* Input Box Form */}
         <form onSubmit={handleSubmit} className="flex items-end gap-2">
+          {/* Hidden File Input */}
+          <input
+            ref={fileInputRef}
+            type="file"
+            multiple
+            accept="image/*,.pdf,.txt,.md,.json,.csv,.js,.ts,.step,.stp,.stl"
+            onChange={(e) => {
+              if (e.target.files) {
+                handleFileUpload(e.target.files);
+                e.target.value = '';
+              }
+            }}
+            className="hidden"
+          />
+
+          <button
+            type="button"
+            onClick={() => fileInputRef.current?.click()}
+            title="Attach blueprint, photo, drawing, or datasheet (Images, PDF, STL, STEP, Code)"
+            className="p-2.5 rounded-xl bg-surface hover:bg-surface-subtle border border-surface-border text-slate-400 hover:text-cyan transition-colors shrink-0 cursor-pointer"
+          >
+            <Paperclip className="w-4 h-4" />
+          </button>
+
           <div className="flex-1 relative rounded-xl bg-background border border-surface-border focus-within:border-cyan transition-colors overflow-hidden">
             <textarea
               ref={textareaRef}
               value={prompt}
               onChange={handleTextareaInput}
               onKeyDown={handleKeyDown}
+              onPaste={handlePaste}
               disabled={isGenerating}
               rows={1}
               placeholder={
                 isGenerating
-                  ? 'HaiCAD is generating your 3D model...'
+                  ? 'HaiCAD is analyzing and generating your 3D model...'
+                  : attachedAssets.length > 0
+                  ? 'Describe how to use this asset, or press Send to auto-generate...'
                   : !hasActiveKeyForProvider
                   ? 'Add your free OpenRouter or Gemini key in BYOK...'
-                  : 'Describe CAD changes (e.g. "Add 4 M4 holes")...'
+                  : 'Describe CAD changes or attach drawing/photo (Paste or Drop)...'
               }
               className="w-full bg-transparent px-3 py-2.5 text-xs text-slate-100 placeholder-slate-500 focus:outline-none resize-none max-h-28"
             />
@@ -698,10 +870,10 @@ export const AIChatPanel: React.FC<AIChatPanelProps> = ({
 
           <button
             type="submit"
-            disabled={!prompt.trim() || isGenerating}
+            disabled={(!prompt.trim() && attachedAssets.length === 0) || isGenerating}
             className={`p-2.5 rounded-xl flex items-center justify-center transition-all shrink-0 ${
-              prompt.trim() && !isGenerating
-                ? 'bg-primary hover:bg-primary-hover text-white shadow-md shadow-primary/30'
+              (prompt.trim() || attachedAssets.length > 0) && !isGenerating
+                ? 'bg-primary hover:bg-primary-hover text-white shadow-md shadow-primary/30 cursor-pointer'
                 : 'bg-surface-subtle text-slate-500 cursor-not-allowed border border-surface-border'
             }`}
           >
@@ -715,8 +887,8 @@ export const AIChatPanel: React.FC<AIChatPanelProps> = ({
 
         {/* Bottom Helper text */}
         <div className="flex items-center justify-between text-[10px] font-mono text-slate-500 px-1">
-          <span>Enter to send • Shift+Enter for newline</span>
-          <span className="text-cyan-glow">100% Free AI Engine</span>
+          <span>Attach or Paste blueprints • Enter to send</span>
+          <span className="text-cyan-glow">Multimodal Vision Engine</span>
         </div>
       </div>
     </aside>
