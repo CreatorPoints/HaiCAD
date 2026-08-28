@@ -39,42 +39,32 @@ export interface ModelCapabilityProfile {
 
 /**
  * 100% STRICT FREE TIER MODEL PROFILES
- * Under no circumstances are paid models included or routed.
+ * Uses only proven, high-quota free tier endpoints (Gemini 2.5 Flash, Gemini 3.6 Flash, Nemotron Free, Cohere Free).
+ * Zero-quota / preview endpoints (like gemini-3.1-pro with limit:0) are strictly excluded.
  */
 export const MODEL_CAPABILITY_PROFILES: ModelCapabilityProfile[] = [
-  // --- Google Gemini Free Tier Models (via Google AI Studio Free Quota) ---
+  // --- Google Gemini High-Quota Free Tier Models ---
   {
     id: 'gemini-2.5-flash',
     name: 'Gemini 2.5 Flash (Free Tier)',
     provider: 'gemini',
     isFree: true,
-    isReasoningSpecialist: false,
-    isCodeSpecialist: true,
-    speedScore: 10,
-    priorityRank: 1,
-    allowedModes: ['CODE_IMPLEMENTATION', 'QUESTION_EXPLANATION'],
-  },
-  {
-    id: 'gemini-3.1-pro-preview',
-    name: 'Gemini 3.1 Pro (Free Tier)',
-    provider: 'gemini',
-    isFree: true,
     isReasoningSpecialist: true,
     isCodeSpecialist: true,
-    speedScore: 7,
-    priorityRank: 2,
-    allowedModes: ['REASONING', 'KERNEL_REPAIR', 'CODE_IMPLEMENTATION'],
+    speedScore: 10,
+    priorityRank: 1, // Primary Google workhorse: 15 RPM / 1M TPM / 1500 RPD free quota
+    allowedModes: ['CODE_IMPLEMENTATION', 'REASONING', 'KERNEL_REPAIR', 'QUESTION_EXPLANATION'],
   },
   {
     id: 'gemini-3.6-flash',
     name: 'Gemini 3.6 Flash (Free Tier)',
     provider: 'gemini',
     isFree: true,
-    isReasoningSpecialist: false,
+    isReasoningSpecialist: true,
     isCodeSpecialist: true,
     speedScore: 9.5,
-    priorityRank: 5,
-    allowedModes: ['CODE_IMPLEMENTATION', 'QUESTION_EXPLANATION'],
+    priorityRank: 2,
+    allowedModes: ['CODE_IMPLEMENTATION', 'REASONING', 'QUESTION_EXPLANATION'],
   },
   {
     id: 'gemini-2.5-flash-lite',
@@ -84,18 +74,7 @@ export const MODEL_CAPABILITY_PROFILES: ModelCapabilityProfile[] = [
     isReasoningSpecialist: false,
     isCodeSpecialist: true,
     speedScore: 9.8,
-    priorityRank: 6,
-    allowedModes: ['CODE_IMPLEMENTATION', 'FAST_PRIMITIVE' as any],
-  },
-  {
-    id: 'gemma-4-31b-it',
-    name: 'Gemma 4 31B (Google Free Tier)',
-    provider: 'gemini',
-    isFree: true,
-    isReasoningSpecialist: false,
-    isCodeSpecialist: true,
-    speedScore: 8.0,
-    priorityRank: 7,
+    priorityRank: 3,
     allowedModes: ['CODE_IMPLEMENTATION', 'QUESTION_EXPLANATION'],
   },
 
@@ -108,7 +87,7 @@ export const MODEL_CAPABILITY_PROFILES: ModelCapabilityProfile[] = [
     isReasoningSpecialist: true,
     isCodeSpecialist: false,
     speedScore: 8.5,
-    priorityRank: 3,
+    priorityRank: 4,
     allowedModes: ['REASONING', 'KERNEL_REPAIR'],
   },
 
@@ -121,7 +100,7 @@ export const MODEL_CAPABILITY_PROFILES: ModelCapabilityProfile[] = [
     isReasoningSpecialist: false,
     isCodeSpecialist: true,
     speedScore: 9.5,
-    priorityRank: 4,
+    priorityRank: 5,
     allowedModes: ['CODE_IMPLEMENTATION', 'KERNEL_REPAIR'],
   },
   {
@@ -354,7 +333,7 @@ export function routeOptimalModel(params: {
     return false;
   });
 
-  // 4. Strict Mode Filtering (Reasoning models ONLY for reasoning, Code models ONLY for coding)
+  // 4. Strict Mode Filtering
   let modeMatchingProfiles = keyAllowedProfiles.filter((p) => {
     if (analysis.mode === 'REASONING') {
       return p.isReasoningSpecialist === true && p.allowedModes.includes('REASONING');
@@ -377,11 +356,11 @@ export function routeOptimalModel(params: {
 
   let reasonText = '';
   if (analysis.mode === 'REASONING') {
-    reasonText = `Strictly routed to ${chosenProfile.name} (Free Reasoning Specialist) for mathematical geometry derivation`;
+    reasonText = `Strictly routed to ${chosenProfile.name} for mathematical geometry derivation`;
   } else if (analysis.mode === 'KERNEL_REPAIR') {
-    reasonText = `Strictly routed to ${chosenProfile.name} (Free Kernel Repair Specialist) for OpenCASCADE debugging`;
+    reasonText = `Strictly routed to ${chosenProfile.name} for OpenCASCADE debugging`;
   } else {
-    reasonText = `Strictly routed to ${chosenProfile.name} (Free Code Specialist) for parametric solid drafting`;
+    reasonText = `Strictly routed to ${chosenProfile.name} (Free Tier Workhorse) for parametric solid drafting`;
   }
 
   return {

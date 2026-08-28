@@ -541,8 +541,9 @@ export async function generateCADCode(params: GenerateCADParams): Promise<Genera
       candidateKey.lastUsed = Date.now();
 
       if (provider === 'gemini') {
-        const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${effectiveModel}:generateContent?key=${candidateKey.key.trim()}`;
-        const res = await fetch(apiUrl, {
+        let modelToCall = effectiveModel;
+        let apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${modelToCall}:generateContent?key=${candidateKey.key.trim()}`;
+        let res = await fetch(apiUrl, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -553,6 +554,24 @@ export async function generateCADCode(params: GenerateCADParams): Promise<Genera
             },
           }),
         });
+
+        // If preview model was not found (404) or hit limit:0 / rate limit (429), auto-fallback to gemini-2.5-flash
+        if (!res.ok && modelToCall !== 'gemini-2.5-flash') {
+          onStepProgress?.(`Auto-switching to high-throughput Gemini 2.5 Flash Free Tier...`);
+          modelToCall = 'gemini-2.5-flash';
+          apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${modelToCall}:generateContent?key=${candidateKey.key.trim()}`;
+          res = await fetch(apiUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              contents: [{ role: 'user', parts: [{ text: `${fullSystemPrompt}\n\n${userContent}` }] }],
+              generationConfig: {
+                temperature: 0.2,
+                maxOutputTokens: 4096,
+              },
+            }),
+          });
+        }
 
         if (!res.ok) {
           const errJson = await res.json().catch(() => ({}));
