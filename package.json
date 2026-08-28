@@ -12,6 +12,8 @@
     "@monaco-editor/react": "^4.7.0",
     "clsx": "^2.1.1",
     "lucide-react": "^1.16.0",
+    "react-markdown": "^10.1.0",
+    "remark-gfm": "^4.0.1",
     "replicad": "^1.0.1",
     "replicad-opencascadejs": "^1.0.0",
     "tailwind-merge": "^3.5.0",

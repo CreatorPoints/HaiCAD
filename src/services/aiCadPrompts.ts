@@ -18,21 +18,21 @@ Strict Replicad Coding Directives:
    - Example: \`shape.fillet(r, (e) => e.inDirection("Z"))\` or \`shape.fillet(r, (e) => e.inPlane("XY"))\`
 4. Boolean Cuts: Always oversize cutter shapes slightly along the cutting axis (e.g. height + 4, translate -2 on Z) so holes pierce through cleanly without coincident boundary artifacts.
 5. Function Modularity: You are generating a single step function that returns a single valid 3D solid shape.
-6. NO MARKDOWN PROSE: When generating code, output ONLY the JavaScript function inside \`\`\`javascript ... \`\`\` code block. Do NOT include markdown summaries or conversational chatter outside the code block.
+6. NO MARKDOWN PROSE: Output ONLY the JavaScript function inside \`\`\`javascript ... \`\`\` code block.
 `;
 
 export const PLANNING_SYSTEM_PROMPT = `
 You are the HaiCAD Engineering Design Consultant.
-Your task is to analyze user prompts for 3D CAD modeling requests.
+Your task is to understand the user's 3D CAD design request and guide them through parametric solid modeling.
 
 Evaluation Rules:
 1. VAGUENESS CHECK:
-   - If the request is high-level, vague, or missing essential manufacturing parameters (e.g., "make a macropad", "make a phone stand", "design a gear", "mounting plate"), do NOT generate any CAD code.
-   - Instead, respond politely and conversationally with 1 to 2 very specific engineering clarifying questions (such as outer dimensions, mounting hole diameters/spacing, wall thickness, or component clearance).
-   - Suggest 2-3 common default presets if applicable (e.g., "e.g., 3x3 layout with 19.05mm switch spacing, or 4x4 layout?").
+   - If the request is high-level or missing essential parameters (e.g., "make a macropad", "make a phone stand", "design a gear"), do NOT generate code yet.
+   - Respond conversationally with 1 to 2 specific clarifying questions (outer dimensions, hole diameter/spacing, wall thickness, or switch layout).
+   - Suggest 2-3 realistic options/presets so the user can choose easily.
 
 2. PARAMETER EXTRACTION:
-   - When the user provides dimensions or answers, summarize what parameters are now established into a structured JSON block at the bottom:
+   - When the user provides dimensions, intent, or answers, summarize established parameters into a JSON block at the bottom:
    \`\`\`json
    {
      "isReadyToGenerate": true | false,
@@ -44,7 +44,7 @@ Evaluation Rules:
      "summary": "Brief summary of the established design"
    }
    \`\`\`
-   - Set \`isReadyToGenerate: true\` ONLY when enough key dimensions are defined to build the base geometry.
+   - Set \`isReadyToGenerate: true\` as soon as basic boundary dimensions (e.g. width, length, height or radius) are known or when the user explicitly requests to build/generate.
 `;
 
 export function buildPhaseCodePrompt(
@@ -55,6 +55,7 @@ export function buildPhaseCodePrompt(
     addCutoutsCode?: string;
     addFeaturesCode?: string;
   },
+  userIntent?: string,
   userFeedback?: string
 ): string {
   const paramsJson = JSON.stringify(params, null, 2);
@@ -62,17 +63,18 @@ export function buildPhaseCodePrompt(
   switch (phase) {
     case 'base':
       return `
-Design Parameters:
+User Project Goal: "${userIntent || params.objectType || 'Parametric Part'}"
+Established Parameters:
 ${paramsJson}
 
-${userFeedback ? `User Modification Request: ${userFeedback}\n` : ''}
-Task: Generate the Step 1 base function: \`function buildBase(cadEnv, params)\`
+${userFeedback ? `User Adjustment Notes: "${userFeedback}"\n` : ''}
+Task: Generate the Step 1 Base Geometry function: \`function buildBase(cadEnv, params)\`
 Requirements:
-- Create the primary outer boundary solid for the ${params.objectType || 'part'}.
-- Use \`params\` dimensions (or sensible defaults from the params provided).
+- Create the primary outer boundary solid matching the user's intent and parameters.
+- Use dimensions from \`params\` (with sensible fallbacks).
 - Output ONLY the \`buildBase\` function inside \`\`\`javascript ... \`\`\` block.
 
-Example structure:
+Example:
 \`\`\`javascript
 function buildBase(cadEnv, params) {
   const { makeBox, drawRoundedRectangle } = cadEnv;
@@ -86,21 +88,24 @@ function buildBase(cadEnv, params) {
 
     case 'cutouts':
       return `
-Design Parameters:
+User Project Goal: "${userIntent || params.objectType || 'Parametric Part'}"
+Established Parameters:
 ${paramsJson}
 
-Existing Base Code:
-${existingCodeRegistry.buildBaseCode || '// Base shape generated'}
+Existing Base Solid Function:
+\`\`\`javascript
+${existingCodeRegistry.buildBaseCode || '// Base shape'}
+\`\`\`
 
-${userFeedback ? `User Modification Request: ${userFeedback}\n` : ''}
-Task: Generate the Step 2 cutout function: \`function addCutouts(cadEnv, baseShape, params)\`
+${userFeedback ? `User Adjustment Notes: "${userFeedback}"\n` : ''}
+Task: Generate the Step 2 Cutouts function: \`function addCutouts(cadEnv, baseShape, params)\`
 Requirements:
-- Cut internal cavities, component pockets, screw bores, mounting slots, or through-holes from \`baseShape\`.
-- Remember to oversize cutters and use \`.cut(cutterShape)\`.
+- Subtractive modeling: cut pockets, cavities, switch holes, bores, or slots from \`baseShape\`.
+- Oversize cutters slightly along the cutting axis (e.g. height + 4, translate -2 on Z) so holes pierce through cleanly.
 - Return the modified solid.
 - Output ONLY the \`addCutouts\` function inside \`\`\`javascript ... \`\`\` block.
 
-Example structure:
+Example:
 \`\`\`javascript
 function addCutouts(cadEnv, baseShape, params) {
   const { makeCylinder } = cadEnv;
@@ -112,41 +117,40 @@ function addCutouts(cadEnv, baseShape, params) {
 
     case 'features':
       return `
-Design Parameters:
+User Project Goal: "${userIntent || params.objectType || 'Parametric Part'}"
+Established Parameters:
 ${paramsJson}
 
-Existing Functions:
-Base:
+Existing Base & Cutout Pipeline:
+\`\`\`javascript
 ${existingCodeRegistry.buildBaseCode || ''}
-Cutouts:
 ${existingCodeRegistry.addCutoutsCode || ''}
+\`\`\`
 
-${userFeedback ? `User Modification Request: ${userFeedback}\n` : ''}
-Task: Generate the Step 3 feature enhancement function: \`function addFeatures(cadEnv, currentShape, params)\`
+${userFeedback ? `User Adjustment Notes: "${userFeedback}"\n` : ''}
+Task: Generate the Step 3 Feature Enhancement function: \`function addFeatures(cadEnv, currentShape, params)\`
 Requirements:
-- Add structural ribs, bosses, snaps, chamfers, or safe directional fillets (e.g. \`shape.fillet(r, (e) => e.inDirection("Z"))\`).
+- Add structural ribs, bosses, snaps, or directional fillets (\`shape.fillet(r, (e) => e.inDirection("Z"))\`).
 - Return the updated solid.
 - Output ONLY the \`addFeatures\` function inside \`\`\`javascript ... \`\`\` block.
 `;
 
     case 'finalizing':
       return `
-Design Parameters:
+User Project Goal: "${userIntent || params.objectType || 'Parametric Part'}"
+Established Parameters:
 ${paramsJson}
 
-Existing Model Pipeline:
-Base + Cutouts + Features already defined.
-
-${userFeedback ? `User Modification Request: ${userFeedback}\n` : ''}
-Task: Generate the Step 4 finalization function: \`function finalizeModel(cadEnv, currentShape, params)\`
+${userFeedback ? `User Adjustment Notes: "${userFeedback}"\n` : ''}
+Task: Generate the Step 4 Polish & Finalize function: \`function finalizeModel(cadEnv, currentShape, params)\`
 Requirements:
-- Apply final edge deburring, edge chamfers, orientation transforms, or tolerance checks.
-- Return the final production-ready solid.
+- Apply final chamfers, edge deburring, clearance adjustments, or coordinate alignment.
+- Return the production-ready solid.
 - Output ONLY the \`finalizeModel\` function inside \`\`\`javascript ... \`\`\` block.
 `;
 
     default:
-      return `Generate Replicad code for phase: ${phase} based on parameters: ${paramsJson}`;
+      return `Generate Replicad function for phase: ${phase} based on parameters: ${paramsJson}`;
   }
 }
 
@@ -176,9 +180,8 @@ Original Design Intent / Prompt:
 ${params.originalPrompt}
 
 Correction Instructions:
-1. Analyze the exact error above (e.g. undefined helper, bad boolean cutter orientation, invalid fillet edge filter, or missing return).
-2. Fix the code to ensure it executes cleanly without errors.
-3. If a fillet failed, reduce the radius or use directional filters like \`(e) => e.inDirection("Z")\`.
-4. Return ONLY the corrected function inside \`\`\`javascript ... \`\`\` with NO additional markdown commentary outside the block.
+1. Fix the error (e.g. undefined helper, bad boolean cutter dimensions, zero-thickness artifacts, or invalid fillet edge filter).
+2. If a fillet failed, reduce the radius or use directional filters like \`(e) => e.inDirection("Z")\`.
+3. Return ONLY the corrected function inside \`\`\`javascript ... \`\`\` with NO markdown commentary outside the block.
 `;
 }

@@ -260,7 +260,7 @@ export const App: React.FC = () => {
         />
 
         {/* Center 3D Viewport */}
-        <main className="flex-1 h-full bg-background relative overflow-hidden flex flex-col">
+        <main className="flex-1 h-full bg-background relative overflow-hidden flex flex-col min-w-0">
           <CADViewport
             ref={viewportRef}
             meshes={meshes}

@@ -99,12 +99,15 @@ export const CADViewport = forwardRef<CADViewportHandle, CADViewportProps>(
         alpha: true,
         powerPreference: 'high-performance',
       });
-      renderer.setSize(width, height);
+      renderer.setSize(width, height, true);
       renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
       renderer.shadowMap.enabled = true;
       renderer.shadowMap.type = THREE.PCFSoftShadowMap;
       renderer.toneMapping = THREE.ACESFilmicToneMapping;
       renderer.toneMappingExposure = 1.2;
+      renderer.domElement.style.width = '100%';
+      renderer.domElement.style.height = '100%';
+      renderer.domElement.style.display = 'block';
       rendererRef.current = renderer;
       currentMount.appendChild(renderer.domElement);
 
@@ -161,23 +164,29 @@ export const CADViewport = forwardRef<CADViewportHandle, CADViewportProps>(
       };
       animate();
 
-      // 10. Robust Container ResizeObserver (Prevents viewport stretching on drawer toggle)
-      const resizeObserver = new ResizeObserver((entries) => {
-        for (const entry of entries) {
-          const { width: newWidth, height: newHeight } = entry.contentRect;
-          if (newWidth > 0 && newHeight > 0) {
-            camera.aspect = newWidth / newHeight;
-            camera.updateProjectionMatrix();
-            renderer.setSize(newWidth, newHeight, false);
-          }
+      // 10. Robust Container ResizeObserver & Window Resize
+      const handleResize = () => {
+        if (!currentMount) return;
+        const w = currentMount.clientWidth;
+        const h = currentMount.clientHeight;
+        if (w > 0 && h > 0) {
+          camera.aspect = w / h;
+          camera.updateProjectionMatrix();
+          renderer.setSize(w, h, true);
         }
+      };
+
+      const resizeObserver = new ResizeObserver(() => {
+        handleResize();
       });
       resizeObserver.observe(currentMount);
+      window.addEventListener('resize', handleResize);
 
       // Cleanup
       return () => {
         cancelAnimationFrame(animationFrameId);
         resizeObserver.disconnect();
+        window.removeEventListener('resize', handleResize);
         if (currentMount && renderer.domElement) {
           currentMount.removeChild(renderer.domElement);
         }

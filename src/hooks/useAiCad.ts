@@ -3,10 +3,10 @@
  * 
  * Implements:
  * 1. Strict State Machine: planning -> base -> cutouts -> features -> finalizing -> export
- * 2. Conversational Planning & Vague Intent Clarification
+ * 2. Conversational Planning & Context Awareness
  * 3. Step-by-step modular Replicad code generation
  * 4. Self-Correction Loop with up to 3 automated retries upon Web Worker compilation/geometry failure
- * 5. OpenRouter API integration with autonomous model cycling / fallback
+ * 5. OpenRouter API integration with autonomous model cycling & tracking
  */
 
 import { useState, useCallback, useRef } from 'react';
@@ -136,7 +136,8 @@ export function useAiCad(config: AiCadConfig = {}) {
       setModelState(nextModel);
       addMessage({
         role: 'ai-correction',
-        content: `🔄 Model \`${failedModel.split('/')[1] || failedModel}\` unavailable (${reason}). Automatically cycling to \`${nextModel.split('/')[1] || nextModel}\`...`,
+        content: `🔄 **Model Fallback**: \`${failedModel.split('/')[1] || failedModel}\` error (${reason}). Automatically cycling to \`${nextModel.split('/')[1] || nextModel}\`...`,
+        modelUsed: nextModel,
       });
     },
     [addMessage]
@@ -178,21 +179,34 @@ export function useAiCad(config: AiCadConfig = {}) {
       setRetryCount(0);
       setLastError(null);
 
-      currentStepPromptRef.current = stepPrompt;
+      if (stepPrompt) {
+        currentStepPromptRef.current = stepPrompt;
+      }
 
       try {
-        // 1. Prepare Prompt
+        // 1. Prepare Prompt with full context
         const promptContent = buildPhaseCodePrompt(
           targetPhase,
           designParams,
           phaseCodeRegistry.current,
+          currentStepPromptRef.current,
           userFeedback
         );
+
+        // Include recent user intent from chat history
+        const relevantHistory = messages
+          .filter((m) => m.role === 'user' || (m.role === 'assistant' && !m.codeSnippet))
+          .slice(-6)
+          .map((m) => ({
+            role: (m.role === 'user' ? 'user' : 'assistant') as 'user' | 'assistant',
+            content: m.content,
+          }));
 
         // 2. Call OpenRouter API with automated model cycling
         const completionRes = await OpenRouterService.createChatCompletionWithFallback(
           [
             { role: 'system', content: REPLICAD_SYSTEM_CONTEXT },
+            ...relevantHistory,
             { role: 'user', content: promptContent },
           ],
           { apiKey, model },
@@ -200,6 +214,7 @@ export function useAiCad(config: AiCadConfig = {}) {
         );
 
         let candidateCode = extractCodeBlock(completionRes.content);
+        let usedAiModel = completionRes.usedModel;
 
         // 3. Self-Correction Loop (Try/Catch Web Worker Execution)
         let attempt = 0;
@@ -242,6 +257,7 @@ export function useAiCad(config: AiCadConfig = {}) {
             phase: targetPhase,
             correctionAttempt: attempt,
             error: lastErrorMsg,
+            modelUsed: usedAiModel,
             content: `⚠️ Step execution error (Attempt ${attempt}/${MAX_AUTO_RETRIES}): "${lastErrorMsg}". Initiating automated self-correction...`,
           });
 
@@ -249,7 +265,7 @@ export function useAiCad(config: AiCadConfig = {}) {
             // Ask AI to correct the code (with fallback cycling)
             const correctionPrompt = buildSelfCorrectionPrompt({
               error: lastErrorMsg,
-              originalPrompt: stepPrompt,
+              originalPrompt: currentStepPromptRef.current,
               failedCode: candidateCode,
               phase: targetPhase,
               attempt,
@@ -265,6 +281,7 @@ export function useAiCad(config: AiCadConfig = {}) {
             );
 
             candidateCode = extractCodeBlock(correctedRes.content);
+            usedAiModel = correctedRes.usedModel;
           }
         }
 
@@ -281,6 +298,7 @@ export function useAiCad(config: AiCadConfig = {}) {
             phase: targetPhase,
             codeSnippet: candidateCode,
             needsVerification: true,
+            modelUsed: usedAiModel,
             content: `### Step ${targetPhase.toUpperCase()} Complete ⚡\n\n\`\`\`javascript\n${candidateCode}\n\`\`\`\n\n**Step complete. Verify geometry? (Yes/No/Modify)**`,
             suggestedOptions: ['Yes (Proceed)', 'No (Regenerate)', 'Modify with Notes'],
           });
@@ -292,6 +310,7 @@ export function useAiCad(config: AiCadConfig = {}) {
             role: 'assistant',
             phase: targetPhase,
             error: lastErrorMsg,
+            modelUsed: usedAiModel,
             content: `❌ **Automated Self-Correction Limit Reached**\n\nThe CAD kernel failed to compile after ${MAX_AUTO_RETRIES} attempts.\n**Error:** \`${lastErrorMsg}\`\n\nPlease provide manual instructions, adjust the parameters, or edit the script.`,
             suggestedOptions: ['Retry Step', 'Adjust Dimensions', 'Switch to Manual Edit'],
           });
@@ -311,11 +330,11 @@ export function useAiCad(config: AiCadConfig = {}) {
         setIsLoading(false);
       }
     },
-    [apiKey, model, designParams, evaluateInWorker, addMessage, handleModelCycle]
+    [apiKey, model, designParams, messages, evaluateInWorker, addMessage, handleModelCycle]
   );
 
   /**
-   * Handles user text input across all phases
+   * Handles user text input across all phases with full conversational context
    */
   const sendMessage = useCallback(
     async (userInput: string) => {
@@ -368,6 +387,7 @@ export function useAiCad(config: AiCadConfig = {}) {
           );
 
           const response = responseRes.content;
+          const usedAiModel = responseRes.usedModel;
 
           // Extract any structured parameters from the response
           const jsonMeta = extractJsonBlock<{
@@ -397,9 +417,10 @@ export function useAiCad(config: AiCadConfig = {}) {
             addMessage({
               role: 'assistant',
               phase: 'planning',
+              modelUsed: usedAiModel,
               content: `${conversationalText || 'Great! All core parameters established.'}\n\n📐 **Ready to generate Phase 1: Base Geometry.**`,
             });
-            // Transition to base generation
+            currentStepPromptRef.current = trimmed;
             await generateAndVerifyPhaseCode('base', trimmed);
           } else {
             // Vague input or questions needed
@@ -407,6 +428,7 @@ export function useAiCad(config: AiCadConfig = {}) {
               role: 'assistant',
               phase: 'planning',
               isQuestion: true,
+              modelUsed: usedAiModel,
               content: conversationalText || response,
             });
           }
@@ -425,8 +447,8 @@ export function useAiCad(config: AiCadConfig = {}) {
         return;
       }
 
-      // If in intermediate phases, treat user prompt as modification or next action
-      await generateAndVerifyPhaseCode(phase, trimmed);
+      // If in intermediate phases, treat user prompt as modification or next instruction with full context
+      await generateAndVerifyPhaseCode(phase, currentStepPromptRef.current, trimmed);
     },
     [
       phase,

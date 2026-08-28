@@ -49,6 +49,7 @@ export interface AiCadMessage {
   correctionAttempt?: number;
   error?: string;
   suggestedOptions?: string[];
+  modelUsed?: string;
 }
 
 export interface PhaseCodeRegistry {
