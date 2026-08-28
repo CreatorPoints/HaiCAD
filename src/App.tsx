@@ -87,8 +87,8 @@ export const App: React.FC = () => {
   // Left Sidebar State (Defaults to 'ai_chat' OPEN)
   const [activeSidebarTab, setActiveSidebarTab] = useState<SidebarTab | null>('ai_chat');
 
-  // Viewport Display Settings
-  const [renderMode, setRenderMode] = useState<RenderMode>('clay');
+  // Viewport Display Settings (3 Clean Modes: lit, unlit, wireframe)
+  const [renderMode, setRenderMode] = useState<RenderMode>('lit');
   const [showGrid, setShowGrid] = useState(true);
   const [showAxes, setShowAxes] = useState(true);
   const [showEdges, setShowEdges] = useState(true);

@@ -5,7 +5,7 @@ import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { WorkerMeshOutput } from '../cad/cadClient';
 import { Box, Eye, Layers, Maximize2, RotateCcw } from 'lucide-react';
 
-export type RenderMode = 'clay' | 'metallic' | 'wireframe' | 'xray';
+export type RenderMode = 'lit' | 'unlit' | 'wireframe';
 
 export interface CADViewportHandle {
   setCameraView: (view: 'iso' | 'top' | 'front' | 'right') => void;
@@ -50,8 +50,8 @@ export const CADViewport = forwardRef<CADViewportHandle, CADViewportProps>(
     const gridRef = useRef<THREE.GridHelper | null>(null);
     const axesRef = useRef<THREE.AxesHelper | null>(null);
 
-    // Fallback internal states if not controlled
-    const [internalRenderMode, setInternalRenderMode] = useState<RenderMode>('clay');
+    // Fallback internal states if not controlled (Default: 'lit')
+    const [internalRenderMode, setInternalRenderMode] = useState<RenderMode>('lit');
     const [internalShowGrid, setInternalShowGrid] = useState<boolean>(true);
     const [internalShowAxes, setInternalShowAxes] = useState<boolean>(true);
     const [internalShowEdges, setInternalShowEdges] = useState<boolean>(true);
@@ -199,42 +199,25 @@ export const CADViewport = forwardRef<CADViewportHandle, CADViewportProps>(
       if (axesRef.current) axesRef.current.visible = activeShowAxes;
     }, [activeShowGrid, activeShowAxes]);
 
-    // Material Generator based on Render Mode
+    // Material Generator based on Render Mode (Clean CAD Shaders: Lit, Unlit, Wireframe)
     const getMaterialForMode = (mode: RenderMode, originalColor = '#3b82f6') => {
       switch (mode) {
-        case 'clay':
-          return new THREE.MeshStandardMaterial({
-            color: '#d4d4d8',
-            roughness: 0.35,
-            metalness: 0.05,
-            flatShading: false,
-          });
-        case 'metallic':
-          return new THREE.MeshStandardMaterial({
-            color: '#94a3b8',
-            roughness: 0.15,
-            metalness: 0.9,
+        case 'unlit':
+          return new THREE.MeshBasicMaterial({
+            color: originalColor || '#38bdf8',
           });
         case 'wireframe':
           return new THREE.MeshBasicMaterial({
             color: '#00f0ff',
             wireframe: true,
           });
-        case 'xray':
-          return new THREE.MeshPhysicalMaterial({
-            color: originalColor || '#38bdf8',
-            transparent: true,
-            opacity: 0.45,
-            roughness: 0.1,
-            metalness: 0.1,
-            transmission: 0.85,
-            ior: 1.5,
-          });
+        case 'lit':
         default:
           return new THREE.MeshStandardMaterial({
             color: originalColor || '#3b82f6',
-            roughness: 0.3,
-            metalness: 0.2,
+            roughness: 0.4,
+            metalness: 0.1,
+            flatShading: false,
           });
       }
     };

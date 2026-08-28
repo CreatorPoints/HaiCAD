@@ -69,10 +69,9 @@ export const ViewToolsPanel: React.FC<ViewToolsPanelProps> = ({
   }
 
   const renderModesList: Array<{ id: RenderMode; label: string; desc: string; iconColor: string }> = [
-    { id: 'clay', label: 'MatCap Clay', desc: 'Smooth studio matte finish (Default)', iconColor: 'bg-slate-300' },
-    { id: 'metallic', label: 'Titanium Metallic', desc: 'Reflective alloy finish', iconColor: 'bg-slate-500' },
-    { id: 'xray', label: 'Glass X-Ray', desc: 'Translucent internal inspection', iconColor: 'bg-cyan-400' },
-    { id: 'wireframe', label: 'Cyber Wireframe', desc: 'CAD polygon geometry mesh', iconColor: 'bg-cyan-500' },
+    { id: 'lit', label: 'Lit (Shaded)', desc: 'Standard studio lighting & depth (Default)', iconColor: 'bg-cyan-400' },
+    { id: 'unlit', label: 'Unlit (Flat)', desc: 'Engineering flat color with 0 glare', iconColor: 'bg-slate-300' },
+    { id: 'wireframe', label: 'Wireframe', desc: 'Vector polygon geometry mesh', iconColor: 'bg-emerald-400' },
   ];
 
   return (
