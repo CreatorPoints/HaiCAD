@@ -18,7 +18,7 @@ export interface RoutingDecision {
   modelId: string;
   modelName: string;
   provider: 'gemini' | 'openrouter';
-  isFreeTier: boolean;
+  isFreeTier: true; // Strictly 100% free models only
   reason: string;
   taskAnalysis: TaskAnalysis;
   customInstructions: string;
@@ -29,7 +29,7 @@ export interface ModelCapabilityProfile {
   id: string;
   name: string;
   provider: 'gemini' | 'openrouter';
-  isFree: boolean;
+  isFree: true; // Strictly 100% free
   isReasoningSpecialist: boolean; // STRICTLY for reasoning & math
   isCodeSpecialist: boolean; // STRICTLY for Replicad CAD coding
   speedScore: number; // 1-10
@@ -38,26 +38,25 @@ export interface ModelCapabilityProfile {
 }
 
 /**
- * Strict Model Capability Profiles
- * - Reasoning models are ONLY used for reasoning & complex mathematical constraint derivation.
- * - Code models are ONLY used for generating / editing executable Replicad JavaScript.
+ * 100% STRICT FREE TIER MODEL PROFILES
+ * Under no circumstances are paid models included or routed.
  */
 export const MODEL_CAPABILITY_PROFILES: ModelCapabilityProfile[] = [
-  // --- Google Gemini Models ---
+  // --- Google Gemini Free Tier Models (via Google AI Studio Free Quota) ---
   {
     id: 'gemini-2.5-flash',
-    name: 'Gemini 2.5 Flash',
+    name: 'Gemini 2.5 Flash (Free Tier)',
     provider: 'gemini',
     isFree: true,
     isReasoningSpecialist: false,
     isCodeSpecialist: true,
     speedScore: 10,
     priorityRank: 1,
-    allowedModes: ['CODE_IMPLEMENTATION', 'KERNEL_REPAIR', 'QUESTION_EXPLANATION'],
+    allowedModes: ['CODE_IMPLEMENTATION', 'QUESTION_EXPLANATION'],
   },
   {
     id: 'gemini-2.5-pro',
-    name: 'Gemini 2.5 Pro',
+    name: 'Gemini 2.5 Pro (Free Tier)',
     provider: 'gemini',
     isFree: true,
     isReasoningSpecialist: true,
@@ -68,7 +67,7 @@ export const MODEL_CAPABILITY_PROFILES: ModelCapabilityProfile[] = [
   },
   {
     id: 'gemini-2.0-flash',
-    name: 'Gemini 2.0 Flash',
+    name: 'Gemini 2.0 Flash (Free Tier)',
     provider: 'gemini',
     isFree: true,
     isReasoningSpecialist: false,
@@ -78,67 +77,56 @@ export const MODEL_CAPABILITY_PROFILES: ModelCapabilityProfile[] = [
     allowedModes: ['CODE_IMPLEMENTATION', 'QUESTION_EXPLANATION'],
   },
 
-  // --- OpenRouter Dedicated Reasoning Specialists ---
-  {
-    id: 'deepseek/deepseek-r1',
-    name: 'DeepSeek R1 (Reasoning)',
-    provider: 'openrouter',
-    isFree: false,
-    isReasoningSpecialist: true,
-    isCodeSpecialist: false,
-    speedScore: 6,
-    priorityRank: 3,
-    allowedModes: ['REASONING'],
-  },
+  // --- OpenRouter 100% Free Reasoning Specialists (:free) ---
   {
     id: 'nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free',
-    name: 'NVIDIA Nemotron 3 Reasoning (free)',
+    name: 'NVIDIA Nemotron 3 Reasoning (100% Free)',
     provider: 'openrouter',
     isFree: true,
     isReasoningSpecialist: true,
     isCodeSpecialist: false,
     speedScore: 8.5,
-    priorityRank: 4,
-    allowedModes: ['REASONING'],
+    priorityRank: 3,
+    allowedModes: ['REASONING', 'KERNEL_REPAIR'],
   },
 
-  // --- OpenRouter Dedicated Code Specialists ---
+  // --- OpenRouter 100% Free Code Specialists (:free) ---
   {
-    id: 'anthropic/claude-3.7-sonnet',
-    name: 'Claude 3.7 Sonnet',
+    id: 'cohere/north-mini-code:free',
+    name: 'Cohere North Mini Code (100% Free)',
     provider: 'openrouter',
-    isFree: false,
-    isReasoningSpecialist: true,
-    isCodeSpecialist: true,
-    speedScore: 7.5,
-    priorityRank: 2,
-    allowedModes: ['CODE_IMPLEMENTATION', 'REASONING', 'KERNEL_REPAIR'],
-  },
-  {
-    id: 'qwen/qwen-2.5-coder-32b-instruct',
-    name: 'Qwen 2.5 Coder 32B',
-    provider: 'openrouter',
-    isFree: false,
+    isFree: true,
     isReasoningSpecialist: false,
     isCodeSpecialist: true,
-    speedScore: 8.5,
-    priorityRank: 6,
+    speedScore: 9.5,
+    priorityRank: 4,
     allowedModes: ['CODE_IMPLEMENTATION', 'KERNEL_REPAIR'],
   },
   {
-    id: 'cohere/north-mini-code:free',
-    name: 'Cohere North Mini Code (free)',
+    id: 'google/gemma-4-31b-it:free',
+    name: 'Google Gemma 4 31B (100% Free)',
     provider: 'openrouter',
     isFree: true,
     isReasoningSpecialist: false,
     isCodeSpecialist: true,
-    speedScore: 9,
-    priorityRank: 7,
-    allowedModes: ['CODE_IMPLEMENTATION'],
+    speedScore: 8.0,
+    priorityRank: 6,
+    allowedModes: ['CODE_IMPLEMENTATION', 'QUESTION_EXPLANATION'],
   },
   {
-    id: 'google/gemma-4-31b-it:free',
-    name: 'Google Gemma 4 31B (free)',
+    id: 'z-ai/glm-5.2:free',
+    name: 'Z.ai GLM 5.2 (100% Free)',
+    provider: 'openrouter',
+    isFree: true,
+    isReasoningSpecialist: true,
+    isCodeSpecialist: false,
+    speedScore: 8.0,
+    priorityRank: 7,
+    allowedModes: ['REASONING'],
+  },
+  {
+    id: 'openrouter/free',
+    name: 'OpenRouter Free Router (100% Free)',
     provider: 'openrouter',
     isFree: true,
     isReasoningSpecialist: false,
@@ -146,17 +134,6 @@ export const MODEL_CAPABILITY_PROFILES: ModelCapabilityProfile[] = [
     speedScore: 8.0,
     priorityRank: 8,
     allowedModes: ['CODE_IMPLEMENTATION', 'QUESTION_EXPLANATION'],
-  },
-  {
-    id: 'openrouter/free',
-    name: 'Free Models Router',
-    provider: 'openrouter',
-    isFree: true,
-    isReasoningSpecialist: false,
-    isCodeSpecialist: true,
-    speedScore: 8.0,
-    priorityRank: 9,
-    allowedModes: ['CODE_IMPLEMENTATION'],
   },
 ];
 
@@ -262,7 +239,7 @@ export function getCustomInstructions(mode: TaskMode, modelId: string): string {
   switch (mode) {
     case 'REASONING':
       return `
-[EXPERT DIRECTIVE: MATHEMATICAL REASONING & ACCURACY]
+[STRICT EXPERT DIRECTIVE: MATHEMATICAL REASONING SPECIALIST]
 1. Exact Coordinate Calculations:
    - Compute all polar, cartesian, and trigonometric coordinates with high precision in millimeters (mm).
    - For helical, swept, or gear teeth profiles, evaluate angles using explicit Math.PI expressions.
@@ -274,21 +251,21 @@ export function getCustomInstructions(mode: TaskMode, modelId: string): string {
 
     case 'KERNEL_REPAIR':
       return `
-[EXPERT DIRECTIVE: SELF-HEALING KERNEL REPAIR]
+[STRICT EXPERT DIRECTIVE: SELF-HEALING KERNEL REPAIR]
 1. Debug the OpenCASCADE error directly. Resolve non-manifold edges, zero-thickness wall artifacts, and unclosed sketch loops.
 2. Return complete, verified, executable Replicad JavaScript with \`function main(cadEnv) { ... return shape; }\`.
 `;
 
     case 'QUESTION_EXPLANATION':
       return `
-[EXPERT DIRECTIVE: CLEAR TECHNICAL EXPLANATION]
+[STRICT EXPERT DIRECTIVE: CLEAR TECHNICAL EXPLANATION]
 - Provide a clear, concise engineering explanation with dimensions, best practices, and code snippets where relevant.
 `;
 
     case 'CODE_IMPLEMENTATION':
     default:
       return `
-[EXPERT DIRECTIVE: CODE IMPLEMENTATION SPECIALIST]
+[STRICT EXPERT DIRECTIVE: CODE IMPLEMENTATION SPECIALIST]
 1. Directional Edge Fillets:
    - When filleting, use directional edge filters like \`shape.fillet(r, (e) => e.inDirection("Z"))\`.
 2. Clean Boolean Cuts:
@@ -300,7 +277,7 @@ export function getCustomInstructions(mode: TaskMode, modelId: string): string {
 }
 
 /**
- * Smart Router: Routes to the optimal model based on available BYOK keys and strict task specialization
+ * Smart Router: ALWAYS and STRICTLY routes to 100% Free models!
  */
 export function routeOptimalModel(params: {
   prompt: string;
@@ -323,12 +300,15 @@ export function routeOptimalModel(params: {
     (k) => k.provider === 'openrouter' && k.isActive && (!k.isRateLimited || (k.rateLimitedUntil || 0) <= now)
   );
 
-  // If user selected a specific manual model (not 'auto' / 'auto-smart'), respect user choice
+  // Filter available candidate models: ONLY STRICTLY 100% FREE MODELS
+  const profiles = MODEL_CAPABILITY_PROFILES.filter((p) => p.isFree);
+
+  // If user selected a specific manual model, check if valid or fallback to free equivalent
   if (preferredMode !== 'auto' && preferredMode !== 'auto-smart') {
     const manualModel =
-      availableModels.find((m) => m.id === preferredMode) ||
-      DEFAULT_MODELS.find((m) => m.id === preferredMode) ||
-      DEFAULT_MODELS[1]; // default to Gemini Flash
+      profiles.find((m) => m.id === preferredMode) ||
+      availableModels.find((m) => m.id === preferredMode && (m.isFree || m.id.endsWith(':free') || m.id.startsWith('gemini-'))) ||
+      profiles[0];
 
     const customInstructions = getCustomInstructions(analysis.mode, manualModel.id);
 
@@ -336,92 +316,57 @@ export function routeOptimalModel(params: {
       modelId: manualModel.id,
       modelName: manualModel.name,
       provider: manualModel.provider,
-      isFreeTier: Boolean(manualModel.isFree || manualModel.id.startsWith('gemini-')),
-      reason: `Manual selection: ${manualModel.name} (${analysis.intentSummary})`,
+      isFreeTier: true,
+      reason: `Manual 100% Free Selection: ${manualModel.name} (${analysis.intentSummary})`,
       taskAnalysis: analysis,
       customInstructions,
       estimatedLatency: manualModel.id.includes('flash') ? 'instant' : 'fast',
     };
   }
 
-  // 3. Autonomous Smart Routing with STRICT Specialization:
-  const profiles = MODEL_CAPABILITY_PROFILES;
-
-  // Filter models that are allowed for the user's configured keys
+  // 3. Filter candidates strictly by user's active keys
   const keyAllowedProfiles = profiles.filter((p) => {
     if (p.provider === 'gemini' && hasHealthyGeminiKey) return true;
     if (p.provider === 'openrouter' && hasHealthyOpenRouterKey) return true;
-    // If no keys configured yet in pool, consider free tier models
-    if (!hasHealthyGeminiKey && !hasHealthyOpenRouterKey) {
-      return p.isFree;
-    }
+    if (!hasHealthyGeminiKey && !hasHealthyOpenRouterKey) return true; // default pool
     return false;
   });
 
-  // Filter models that match the required task mode
-  let modeMatchingProfiles = keyAllowedProfiles.filter((p) => p.allowedModes.includes(analysis.mode));
+  // 4. Strict Mode Filtering (Reasoning models ONLY for reasoning, Code models ONLY for coding)
+  let modeMatchingProfiles = keyAllowedProfiles.filter((p) => {
+    if (analysis.mode === 'REASONING') {
+      return p.isReasoningSpecialist === true && p.allowedModes.includes('REASONING');
+    }
+    if (analysis.mode === 'CODE_IMPLEMENTATION') {
+      return p.isCodeSpecialist === true && p.allowedModes.includes('CODE_IMPLEMENTATION');
+    }
+    return p.allowedModes.includes(analysis.mode);
+  });
 
-  // If strict mode filtering yielded nothing for available keys, relax to any valid key-supported model
   if (modeMatchingProfiles.length === 0) {
     modeMatchingProfiles = keyAllowedProfiles;
   }
 
-  // If still empty (no keys or matches), choose best global default based on provider key presence
-  if (modeMatchingProfiles.length === 0) {
-    // If user has OpenRouter key only:
-    if (hasHealthyOpenRouterKey) {
-      const orDefault = analysis.requiresDeepReasoning
-        ? profiles.find((p) => p.id === 'deepseek/deepseek-r1') || profiles.find((p) => p.id === 'anthropic/claude-3.7-sonnet')
-        : profiles.find((p) => p.id === 'qwen/qwen-2.5-coder-32b-instruct') || profiles.find((p) => p.id === 'cohere/north-mini-code:free');
-
-      if (orDefault) {
-        return {
-          modelId: orDefault.id,
-          modelName: orDefault.name,
-          provider: 'openrouter',
-          isFreeTier: orDefault.isFree,
-          reason: `Auto-routed to ${orDefault.name} for ${analysis.intentSummary}`,
-          taskAnalysis: analysis,
-          customInstructions: getCustomInstructions(analysis.mode, orDefault.id),
-          estimatedLatency: 'fast',
-        };
-      }
-    }
-
-    // Default to Gemini Flash
-    const fallback = DEFAULT_MODELS.find((m) => m.id === 'gemini-2.5-flash') || DEFAULT_MODELS[1];
-    return {
-      modelId: fallback.id,
-      modelName: fallback.name,
-      provider: fallback.provider,
-      isFreeTier: true,
-      reason: `Auto-routed to ${fallback.name} for ${analysis.intentSummary}`,
-      taskAnalysis: analysis,
-      customInstructions: getCustomInstructions(analysis.mode, fallback.id),
-      estimatedLatency: 'instant',
-    };
-  }
-
-  // Sort matched profiles by priority rank (lowest rank number is highest priority)
+  // Sort by priority rank
   modeMatchingProfiles.sort((a, b) => a.priorityRank - b.priorityRank);
-  const chosenProfile = modeMatchingProfiles[0];
+  const chosenProfile = modeMatchingProfiles[0] || profiles[0];
 
   const customInstructions = getCustomInstructions(analysis.mode, chosenProfile.id);
 
   let reasonText = '';
   if (analysis.mode === 'REASONING') {
-    reasonText = `Routed to ${chosenProfile.name} (Reasoning Specialist) for mathematical geometry derivation`;
+    reasonText = `Strictly routed to ${chosenProfile.name} (Free Reasoning Specialist) for mathematical geometry derivation`;
   } else if (analysis.mode === 'KERNEL_REPAIR') {
-    reasonText = `Routed to ${chosenProfile.name} for OpenCASCADE boolean error self-healing`;
+    reasonText = `Strictly routed to ${chosenProfile.name} (Free Kernel Repair Specialist) for OpenCASCADE debugging`;
   } else {
-    reasonText = `Routed to ${chosenProfile.name} (Code Specialist) for parametric solid drafting`;
+    reasonText = `Strictly routed to ${chosenProfile.name} (Free Code Specialist) for parametric solid drafting`;
   }
 
   return {
     modelId: chosenProfile.id,
     modelName: chosenProfile.name,
     provider: chosenProfile.provider,
-    isFreeTier: chosenProfile.isFree,
+    isFreeTier: true,
     reason: reasonText,
     taskAnalysis: analysis,
     customInstructions,
