@@ -1,13 +1,12 @@
 /**
- * useAiCad - Robust, Self-Correcting React Hook for Agentic Step-by-Step CAD Generation
+ * useAiCad - Robust, Self-Correcting React Hook for Agentic CAD Generation & Direct Editing
  * 
  * Implements:
- * 1. Strict State Machine: planning -> base -> cutouts -> features -> finalizing -> export
- * 2. Real-time Live IDE Script Awareness & Auto-Execution (instantly edits workspace code & recompiles)
- * 3. Conversational Planning & Context Awareness
- * 4. Step-by-step modular Replicad code generation & modification
- * 5. Self-Correction Loop with up to 3 automated retries upon Web Worker compilation/geometry failure
- * 6. OpenRouter API integration with autonomous model cycling & tracking
+ * 1. Live Workspace IDE Synchronization (instantly recompiles & edits code)
+ * 2. Conversational Intent Understanding & Modification Memory
+ * 3. Self-Correction Loop with up to 3 automated retries upon Web Worker compilation/geometry failure
+ * 4. OpenRouter API integration with autonomous model cycling & tracking
+ * 5. Direct User-Driven Workflows (no rigid forced extra steps on completed models)
  */
 
 import { useState, useCallback, useRef, useEffect } from 'react';
@@ -39,16 +38,22 @@ import {
 } from '../services/aiCadCodeUtils';
 import { cadClient, WorkerMeshOutput } from '../cad/cadClient';
 
-const PHASE_SEQUENCE: CadPhase[] = [
-  'planning',
-  'base',
-  'cutouts',
-  'features',
-  'finalizing',
-  'export',
-];
-
 const MAX_AUTO_RETRIES = 3;
+
+function formatCadError(err: any): string {
+  if (!err) return 'CAD Kernel compilation error';
+  if (typeof err === 'string') {
+    if (err.includes('[object WebAssembly.Exception]') || err.includes('WebAssembly')) {
+      return 'WebAssembly Kernel Geometry Exception (invalid topological boolean cut or collapsing fillet radius)';
+    }
+    return err;
+  }
+  if (err.message) return err.message;
+  if (err.name === 'RuntimeError' || String(err).includes('WebAssembly')) {
+    return 'WebAssembly Kernel Geometry Exception (invalid topological boolean cut or collapsing fillet radius)';
+  }
+  return String(err);
+}
 
 export function useAiCad(config: AiCadConfig = {}) {
   // State Machine Phase
@@ -163,12 +168,12 @@ export function useAiCad(config: AiCadConfig = {}) {
         setLastError(null);
         return { success: true, meshes: result.meshes, error: null };
       } else {
-        const err = result.error || 'CAD Kernel geometric compilation failed.';
+        const err = formatCadError(result.error);
         setLastError(err);
         return { success: false, meshes: [], error: err };
       }
     } catch (err: any) {
-      const errStr = err?.message || String(err);
+      const errStr = formatCadError(err);
       setLastError(errStr);
       return { success: false, meshes: [], error: errStr };
     }
@@ -266,7 +271,7 @@ export function useAiCad(config: AiCadConfig = {}) {
           }
 
           // Execution failed -> Self-Correction Trigger
-          lastErrorMsg = evalResult.error || 'CAD Worker evaluation error';
+          lastErrorMsg = formatCadError(evalResult.error);
           attempt += 1;
           setRetryCount(attempt);
           setIsCorrecting(true);
@@ -318,8 +323,8 @@ export function useAiCad(config: AiCadConfig = {}) {
             codeSnippet: candidateCode,
             needsVerification: true,
             modelUsed: usedAiModel,
-            content: `### Step ${targetPhase.toUpperCase()} Complete ⚡\n\n\`\`\`javascript\n${candidateCode}\n\`\`\`\n\n**Step complete. Verify geometry? (Yes/No/Modify)**`,
-            suggestedOptions: ['Yes (Proceed)', 'No (Regenerate)', 'Modify with Notes'],
+            content: `### 3D Model Generated ⚡\n\n\`\`\`javascript\n${candidateCode}\n\`\`\`\n\n**CAD model updated in workspace. Verify geometry? (Yes/No/Modify)**`,
+            suggestedOptions: ['Yes (Looks Great)', 'Modify with Notes', 'Export STEP (.step)'],
           });
           return true;
         } else {
@@ -336,7 +341,7 @@ export function useAiCad(config: AiCadConfig = {}) {
           return false;
         }
       } catch (err: any) {
-        const errorText = err?.message || String(err);
+        const errorText = formatCadError(err);
         setLastError(errorText);
         addMessage({
           role: 'assistant',
@@ -370,11 +375,16 @@ export function useAiCad(config: AiCadConfig = {}) {
       // Handle active verification state if user types text while verification is pending
       if (needsVerification && pendingVerificationPhase) {
         const lower = trimmed.toLowerCase();
-        if (lower.startsWith('yes') || lower.includes('proceed') || lower.includes('looks good') || lower === 'y') {
+        if (lower.startsWith('yes') || lower.includes('proceed') || lower.includes('looks good') || lower.includes('looks great') || lower === 'y') {
           await verifyStep('Yes');
           return;
         } else if (lower.startsWith('no') || lower.includes('regenerate') || lower === 'n') {
           await verifyStep('No');
+          return;
+        } else if (lower.includes('export')) {
+          setPhase('export');
+          setNeedsVerification(false);
+          setPendingVerificationPhase(null);
           return;
         } else {
           await verifyStep('Modify', trimmed);
@@ -382,120 +392,115 @@ export function useAiCad(config: AiCadConfig = {}) {
         }
       }
 
-      // If in planning phase: analyze with live editor context
-      if (phase === 'planning') {
-        setIsLoading(true);
-        setLastError(null);
+      // Analyze user input with live editor context
+      setIsLoading(true);
+      setLastError(null);
 
-        try {
-          const planningHistory = messages
-            .filter((m) => m.role === 'user' || m.role === 'assistant')
-            .map((m) => ({
-              role: (m.role === 'user' ? 'user' : 'assistant') as 'user' | 'assistant',
-              content: m.content,
-            }));
+      try {
+        const planningHistory = messages
+          .filter((m) => m.role === 'user' || m.role === 'assistant')
+          .slice(-6)
+          .map((m) => ({
+            role: (m.role === 'user' ? 'user' : 'assistant') as 'user' | 'assistant',
+            content: m.content,
+          }));
 
-          const responseRes = await OpenRouterService.createChatCompletionWithFallback(
-            [
-              { role: 'system', content: buildPlanningPrompt(currentEditorCodeRef.current) },
-              ...planningHistory,
-              { role: 'user', content: trimmed },
-            ],
-            { apiKey, model },
-            handleModelCycle
-          );
+        const responseRes = await OpenRouterService.createChatCompletionWithFallback(
+          [
+            { role: 'system', content: buildPlanningPrompt(currentEditorCodeRef.current) },
+            ...planningHistory,
+            { role: 'user', content: trimmed },
+          ],
+          { apiKey, model },
+          handleModelCycle
+        );
 
-          const response = responseRes.content;
-          const usedAiModel = responseRes.usedModel;
+        const response = responseRes.content;
+        const usedAiModel = responseRes.usedModel;
 
-          // Extract any structured parameters from the response
-          const jsonMeta = extractJsonBlock<{
-            isReadyToGenerate?: boolean;
-            parameters?: Partial<DesignParameters>;
-            summary?: string;
-          }>(response);
+        // Extract any structured parameters from the response
+        const jsonMeta = extractJsonBlock<{
+          isReadyToGenerate?: boolean;
+          parameters?: Partial<DesignParameters>;
+          summary?: string;
+        }>(response);
 
-          if (jsonMeta?.parameters) {
-            setDesignParams((prev) => ({
-              ...prev,
-              ...jsonMeta.parameters,
-              dimensions: {
-                ...(prev.dimensions || {}),
-                ...(jsonMeta.parameters?.dimensions || {}),
-              },
-            }));
-          }
+        if (jsonMeta?.parameters) {
+          setDesignParams((prev) => ({
+            ...prev,
+            ...jsonMeta.parameters,
+            dimensions: {
+              ...(prev.dimensions || {}),
+              ...(jsonMeta.parameters?.dimensions || {}),
+            },
+          }));
+        }
 
-          // Check if the response contains executable code (e.g. from a direct modification request like "remove holes")
-          const rawCode = extractCodeBlock(response);
-          if (rawCode && (rawCode.includes('function main') || rawCode.includes('main('))) {
-            const evalResult = await evaluateInWorker(rawCode);
-            if (evalResult.success) {
-              setCurrentCode(rawCode);
-              setPhase('base');
-              setNeedsVerification(true);
-              setPendingVerificationPhase('base');
+        // Check if the response contains executable code (e.g. from a direct modification request like "remove holes")
+        const rawCode = extractCodeBlock(response);
+        if (rawCode && (rawCode.includes('function main') || rawCode.includes('main('))) {
+          const evalResult = await evaluateInWorker(rawCode);
+          if (evalResult.success) {
+            setCurrentCode(rawCode);
+            setPhase('export');
+            setNeedsVerification(true);
+            setPendingVerificationPhase('export');
 
-              // Clean conversational text (strip json)
-              const conversationalText = response
-                .replace(/```(?:json)?\s*\{[\s\S]*?\}\s*```/g, '')
-                .trim();
+            // Clean conversational text (strip json)
+            const conversationalText = response
+              .replace(/```(?:json)?\s*\{[\s\S]*?\}\s*```/g, '')
+              .trim();
 
-              addMessage({
-                role: 'assistant',
-                phase: 'base',
-                codeSnippet: rawCode,
-                modelUsed: usedAiModel,
-                needsVerification: true,
-                content: `${conversationalText}\n\n**CAD model updated in workspace. Verify geometry? (Yes/No/Modify)**`,
-                suggestedOptions: ['Yes (Proceed)', 'No (Regenerate)', 'Modify with Notes'],
-              });
-              return;
-            }
-          }
-
-          // Clean conversational response text (strip the JSON metadata from view)
-          const conversationalText = response
-            .replace(/```(?:json)?\s*\{[\s\S]*?\}\s*```/g, '')
-            .trim();
-
-          // Check if ready to generate/modify
-          if (jsonMeta?.isReadyToGenerate) {
             addMessage({
               role: 'assistant',
-              phase: 'planning',
+              phase: 'export',
+              codeSnippet: rawCode,
               modelUsed: usedAiModel,
-              content: `${conversationalText || 'Updating design parameters.'}\n\n📐 **Generating geometry...**`,
+              needsVerification: true,
+              content: `${conversationalText}\n\n**CAD model updated in workspace. Verify geometry? (Yes/No/Modify)**`,
+              suggestedOptions: ['Yes (Looks Great)', 'Modify with Notes', 'Export STEP (.step)'],
             });
-            currentStepPromptRef.current = trimmed;
-            await generateAndVerifyPhaseCode('base', trimmed);
-          } else {
-            // Vague input or questions needed
-            addMessage({
-              role: 'assistant',
-              phase: 'planning',
-              isQuestion: true,
-              modelUsed: usedAiModel,
-              content: conversationalText || response,
-            });
+            return;
           }
-        } catch (err: any) {
-          const errText = err?.message || String(err);
-          setLastError(errText);
+        }
+
+        // Clean conversational response text (strip the JSON metadata from view)
+        const conversationalText = response
+          .replace(/```(?:json)?\s*\{[\s\S]*?\}\s*```/g, '')
+          .trim();
+
+        // Check if ready to generate from scratch
+        if (jsonMeta?.isReadyToGenerate) {
           addMessage({
             role: 'assistant',
-            phase: 'planning',
-            error: errText,
-            content: `⚠️ **Planning Error**: ${errText}`,
+            phase: 'base',
+            modelUsed: usedAiModel,
+            content: `${conversationalText || 'Generating geometry...'}\n\n📐 **Building parametric model...**`,
           });
-        } finally {
-          setIsLoading(false);
+          currentStepPromptRef.current = trimmed;
+          await generateAndVerifyPhaseCode('base', trimmed);
+        } else {
+          // Clarifying question or conversational answer
+          addMessage({
+            role: 'assistant',
+            phase: phase === 'planning' ? 'planning' : phase,
+            isQuestion: true,
+            modelUsed: usedAiModel,
+            content: conversationalText || response,
+          });
         }
-        return;
+      } catch (err: any) {
+        const errText = formatCadError(err);
+        setLastError(errText);
+        addMessage({
+          role: 'assistant',
+          phase,
+          error: errText,
+          content: `⚠️ **AI Service Error**: ${errText}`,
+        });
+      } finally {
+        setIsLoading(false);
       }
-
-      // If in intermediate phases, treat user prompt as modification or next instruction with full context
-      await generateAndVerifyPhaseCode(phase, currentStepPromptRef.current, trimmed);
     },
     [
       phase,
@@ -512,7 +517,7 @@ export function useAiCad(config: AiCadConfig = {}) {
   );
 
   /**
-   * Handles user verification: Yes (Proceed to next phase), No (Regenerate), Modify (Incorporate feedback)
+   * Handles user verification: Yes (Model looks great), No (Regenerate), Modify (Incorporate feedback)
    */
   const verifyStep = useCallback(
     async (action: VerificationAction, feedback?: string) => {
@@ -523,58 +528,40 @@ export function useAiCad(config: AiCadConfig = {}) {
       setPendingVerificationPhase(null);
 
       if (action === 'Yes') {
+        setPhase('export');
         addMessage({
           role: 'user',
-          content: '✅ Verified geometry: Looks good, proceed to next step.',
-          phase: currentVerifiedPhase,
+          content: '✅ Verified geometry: Looks great!',
+          phase: 'export',
         });
 
-        // Determine next phase in sequence
-        const currentIndex = PHASE_SEQUENCE.indexOf(currentVerifiedPhase);
-        const nextPhase = PHASE_SEQUENCE[currentIndex + 1] || 'export';
-
-        if (nextPhase === 'export') {
-          setPhase('export');
-          addMessage({
-            role: 'assistant',
-            phase: 'export',
-            content: `🎉 **Parametric 3D Solid Completed & Verified!**\n\nYour model is fully compiled and ready for manufacturing.\nYou can now export directly to **STEP (\`.step\`)** B-Rep solid or **STL (\`.stl\`)** 3D print mesh.`,
-            suggestedOptions: ['Export STEP (.step)', 'Export STL (.stl)', 'Start New Design'],
-          });
-        } else {
-          setPhase(nextPhase);
-          addMessage({
-            role: 'assistant',
-            phase: nextPhase,
-            content: `Moving to **Phase ${currentIndex + 1}: ${nextPhase.toUpperCase()}**... Generating procedural geometry...`,
-          });
-          await generateAndVerifyPhaseCode(nextPhase, currentStepPromptRef.current);
-        }
+        addMessage({
+          role: 'assistant',
+          phase: 'export',
+          content: `🎉 **Parametric 3D Solid Ready!**\n\nThe model is active in your workspace IDE and compiled in the 3D viewport.\nYou can continue modifying it anytime by typing in the chat, or export directly to **STEP** or **STL**:`,
+          suggestedOptions: ['Export STEP (.step)', 'Export STL (.stl)', 'Start New Design'],
+        });
       } else if (action === 'No') {
         addMessage({
           role: 'user',
-          content: '🔄 Geometry rejected. Regenerating current step...',
+          content: '🔄 Geometry rejected. Regenerating model...',
           phase: currentVerifiedPhase,
         });
         await generateAndVerifyPhaseCode(
-          currentVerifiedPhase,
+          'base',
           currentStepPromptRef.current
         );
       } else if (action === 'Modify') {
-        const modifyNote = feedback || 'Please refine the dimensions and alignments.';
+        const modifyNote = feedback || 'Please refine the geometry.';
         addMessage({
           role: 'user',
           content: `✏️ Modify request: ${modifyNote}`,
           phase: currentVerifiedPhase,
         });
-        await generateAndVerifyPhaseCode(
-          currentVerifiedPhase,
-          currentStepPromptRef.current,
-          modifyNote
-        );
+        await sendMessage(modifyNote);
       }
     },
-    [pendingVerificationPhase, addMessage, generateAndVerifyPhaseCode]
+    [pendingVerificationPhase, addMessage, generateAndVerifyPhaseCode, sendMessage]
   );
 
   /**
@@ -585,7 +572,7 @@ export function useAiCad(config: AiCadConfig = {}) {
       try {
         return await cadClient.exportModel(format);
       } catch (err: any) {
-        setLastError(err?.message || String(err));
+        setLastError(formatCadError(err));
         return null;
       }
     },
