@@ -4,9 +4,9 @@
  * Implements:
  * 1. Live Workspace IDE Synchronization (instantly recompiles & edits code)
  * 2. Conversational Intent Understanding & SVG Vector Drawing Parsing
- * 3. Self-Correction Loop with up to 3 automated retries upon Web Worker compilation/geometry failure
- * 4. OpenRouter API integration with autonomous model cycling & tracking
- * 5. Simple Verification: "Yes" (apply and done) or "No, instead..." (user-guided adjustments)
+ * 3. Self-Correction Loop for any syntax/API errors in generated main() scripts
+ * 4. OpenRouter API integration with quiet model cycling (no chat spam)
+ * 5. Simple Verification: "Yes (Apply)" or "No, instead..."
  */
 
 import { useState, useCallback, useRef, useEffect } from 'react';
@@ -70,11 +70,12 @@ export function useAiCad(config: AiCadConfig = {}) {
   // Chat / Agent Interaction History
   const [messages, setMessages] = useState<AiCadMessage[]>([]);
 
-  // Processing & Self-Correction States
+  // Processing, Self-Correction & Fallback Status
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [isCorrecting, setIsCorrecting] = useState<boolean>(false);
   const [retryCount, setRetryCount] = useState<number>(0);
   const [lastError, setLastError] = useState<string | null>(null);
+  const [fallbackNotice, setFallbackNotice] = useState<string | null>(null);
 
   // Verification Gate State
   const [needsVerification, setNeedsVerification] = useState<boolean>(false);
@@ -145,17 +146,15 @@ export function useAiCad(config: AiCadConfig = {}) {
     return newMessage;
   }, []);
 
-  // Fallback model cycling notification handler
+  // Fallback model cycling handler (quiet single status update, no chat bubble spam)
   const handleModelCycle = useCallback(
-    (failedModel: string, nextModel: string, reason: string) => {
+    (failedModel: string, nextModel: string) => {
       setModelState(nextModel);
-      addMessage({
-        role: 'ai-correction',
-        content: `🔄 **Model Fallback**: \`${failedModel.split('/')[1] || failedModel}\` error (${reason}). Automatically cycling to \`${nextModel.split('/')[1] || nextModel}\`...`,
-        modelUsed: nextModel,
-      });
+      setFallbackNotice(
+        `Cycling to ${nextModel.split('/')[1]?.replace(':free', '') || nextModel}...`
+      );
     },
-    [addMessage]
+    []
   );
 
   /**
@@ -193,13 +192,13 @@ export function useAiCad(config: AiCadConfig = {}) {
       setIsCorrecting(false);
       setRetryCount(0);
       setLastError(null);
+      setFallbackNotice(null);
 
       if (stepPrompt) {
         currentStepPromptRef.current = stepPrompt;
       }
 
       try {
-        // 1. Prepare Prompt with full context and live editor code
         const promptContent = buildPhaseCodePrompt(
           targetPhase,
           designParams,
@@ -209,7 +208,6 @@ export function useAiCad(config: AiCadConfig = {}) {
           currentEditorCodeRef.current
         );
 
-        // Include recent user intent from chat history
         const relevantHistory = messages
           .filter((m) => m.role === 'user' || (m.role === 'assistant' && !m.codeSnippet))
           .slice(-6)
@@ -218,7 +216,6 @@ export function useAiCad(config: AiCadConfig = {}) {
             content: m.content,
           }));
 
-        // 2. Call OpenRouter API with automated model cycling
         const completionRes = await OpenRouterService.createChatCompletionWithFallback(
           [
             { role: 'system', content: REPLICAD_SYSTEM_CONTEXT },
@@ -232,14 +229,12 @@ export function useAiCad(config: AiCadConfig = {}) {
         let candidateCode = extractCodeBlock(completionRes.content);
         let usedAiModel = completionRes.usedModel;
 
-        // 3. Self-Correction Loop (Try/Catch Web Worker Execution)
         let attempt = 0;
         let compilationSuccess = false;
         let finalAssembledScript = '';
         let lastErrorMsg = '';
 
         while (attempt < MAX_AUTO_RETRIES) {
-          // Check if candidateCode is a full standalone script or modular function
           if (candidateCode.includes('function main') || candidateCode.includes('main(')) {
             finalAssembledScript = candidateCode;
           } else {
@@ -256,7 +251,6 @@ export function useAiCad(config: AiCadConfig = {}) {
             );
           }
 
-          // Evaluate candidate code in worker
           const evalResult = await evaluateInWorker(finalAssembledScript);
 
           if (evalResult.success) {
@@ -271,23 +265,12 @@ export function useAiCad(config: AiCadConfig = {}) {
             break;
           }
 
-          // Execution failed -> Self-Correction Trigger
           lastErrorMsg = formatCadError(evalResult.error);
           attempt += 1;
           setRetryCount(attempt);
           setIsCorrecting(true);
 
-          addMessage({
-            role: 'ai-correction',
-            phase: targetPhase,
-            correctionAttempt: attempt,
-            error: lastErrorMsg,
-            modelUsed: usedAiModel,
-            content: `⚠️ Step execution error (Attempt ${attempt}/${MAX_AUTO_RETRIES}): "${lastErrorMsg}". Initiating automated self-correction...`,
-          });
-
           if (attempt < MAX_AUTO_RETRIES) {
-            // Ask AI to correct the code (with fallback cycling)
             const correctionPrompt = buildSelfCorrectionPrompt({
               error: lastErrorMsg,
               originalPrompt: currentStepPromptRef.current,
@@ -301,7 +284,7 @@ export function useAiCad(config: AiCadConfig = {}) {
                 { role: 'system', content: REPLICAD_SYSTEM_CONTEXT },
                 { role: 'user', content: correctionPrompt },
               ],
-              { apiKey, model },
+              { apiKey, model: usedAiModel },
               handleModelCycle
             );
 
@@ -312,7 +295,6 @@ export function useAiCad(config: AiCadConfig = {}) {
 
         setIsCorrecting(false);
 
-        // 4. Handle Result
         if (compilationSuccess) {
           setNeedsVerification(true);
           setPendingVerificationPhase(targetPhase);
@@ -328,15 +310,14 @@ export function useAiCad(config: AiCadConfig = {}) {
           });
           return true;
         } else {
-          // Failed 3 times: Request manual intervention
           setLastError(lastErrorMsg);
           addMessage({
             role: 'assistant',
             phase: targetPhase,
             error: lastErrorMsg,
             modelUsed: usedAiModel,
-            content: `❌ **Automated Self-Correction Limit Reached**\n\nThe CAD kernel failed to compile after ${MAX_AUTO_RETRIES} attempts.\n**Error:** \`${lastErrorMsg}\`\n\nPlease provide manual instructions, adjust the parameters, or edit the script.`,
-            suggestedOptions: ['Retry Step', 'Adjust Dimensions', 'Switch to Manual Edit'],
+            content: `❌ **CAD Compilation Error**\n\n\`${lastErrorMsg}\`\n\nPlease provide manual instructions or edit the script directly in the IDE.`,
+            suggestedOptions: ['Retry', 'Edit in IDE'],
           });
           return false;
         }
@@ -352,13 +333,14 @@ export function useAiCad(config: AiCadConfig = {}) {
         return false;
       } finally {
         setIsLoading(false);
+        setFallbackNotice(null);
       }
     },
     [apiKey, model, designParams, messages, evaluateInWorker, addMessage, handleModelCycle]
   );
 
   /**
-   * Handles user text input and file/image attachments with live editor context awareness & direct code execution
+   * Handles user text input and file/image attachments with automated self-correction and direct IDE sync
    */
   const sendMessage = useCallback(
     async (userInput: string, attachments?: AiAttachment[]) => {
@@ -373,7 +355,7 @@ export function useAiCad(config: AiCadConfig = {}) {
         attachments,
       });
 
-      // Handle active verification state if user types text while verification is pending
+      // Handle active verification state
       if (needsVerification && pendingVerificationPhase) {
         const lower = trimmed.toLowerCase();
         if (lower === 'yes' || lower.startsWith('yes') || lower.includes('apply') || lower.includes('looks good') || lower.includes('looks great') || lower === 'y') {
@@ -386,12 +368,11 @@ export function useAiCad(config: AiCadConfig = {}) {
         }
       }
 
-      // Analyze user input with live editor context
       setIsLoading(true);
       setLastError(null);
+      setFallbackNotice(null);
 
       try {
-        // Format text content including non-image file texts & vector SVG code
         let fullUserPrompt = trimmed;
         if (attachments && attachments.length > 0) {
           for (const att of attachments) {
@@ -402,10 +383,8 @@ export function useAiCad(config: AiCadConfig = {}) {
           }
         }
 
-        // Check for raster image attachments (PNG, JPEG, WebP)
         const rasterImages = attachments?.filter((a) => a.dataUrl && a.type.startsWith('image/') && a.type !== 'image/svg+xml') || [];
 
-        // Build user content part (either string or multi-modal array)
         let userTurnContent: string | any[];
         if (rasterImages.length > 0) {
           userTurnContent = [
@@ -437,10 +416,9 @@ export function useAiCad(config: AiCadConfig = {}) {
           handleModelCycle
         );
 
-        const response = responseRes.content;
-        const usedAiModel = responseRes.usedModel;
+        let response = responseRes.content;
+        let usedAiModel = responseRes.usedModel;
 
-        // Extract any structured parameters from the response
         const jsonMeta = extractJsonBlock<{
           isReadyToGenerate?: boolean;
           parameters?: Partial<DesignParameters>;
@@ -459,38 +437,84 @@ export function useAiCad(config: AiCadConfig = {}) {
         }
 
         // Check if the response contains executable code
-        const rawCode = extractCodeBlock(response);
-        if (rawCode && (rawCode.includes('function main') || rawCode.includes('main('))) {
-          const evalResult = await evaluateInWorker(rawCode);
+        let rawCode = extractCodeBlock(response);
+        if (rawCode && (rawCode.includes('function main') || rawCode.includes('main(') || rawCode.includes('makeBox') || rawCode.includes('draw'))) {
+          let currentCandidate = rawCode;
+          let evalResult = await evaluateInWorker(currentCandidate);
+
+          // Automated Self-Correction if the generated script failed to compile in worker
+          let selfCorrectionAttempt = 0;
+          while (!evalResult.success && selfCorrectionAttempt < 2) {
+            selfCorrectionAttempt++;
+            setIsCorrecting(true);
+            setRetryCount(selfCorrectionAttempt);
+
+            const fixPrompt = `[CRITICAL CAD EXECUTION ERROR]
+Your generated Replicad script failed in the Web Worker with error:
+"""
+${evalResult.error}
+"""
+
+Failed code:
+\`\`\`javascript
+${currentCandidate}
+\`\`\`
+
+Strict Fix Instructions:
+1. In Replicad, use .cut(cutterShape) for subtractive holes/pockets.
+2. Ensure variable names in loops do not shadow each other (e.g. for (const h of holes) { const cutter = makeCylinder(...); pcb = pcb.cut(cutter.translate([h.x, h.y, 0])); }).
+3. Return ONLY the complete corrected \`function main({ makeBox, draw, makeCylinder, drawRoundedRectangle }) { ... }\` in a \`\`\`javascript block.`;
+
+            try {
+              const fixRes = await OpenRouterService.createChatCompletionWithFallback(
+                [
+                  { role: 'system', content: REPLICAD_SYSTEM_CONTEXT },
+                  { role: 'user', content: fixPrompt },
+                ],
+                { apiKey, model: usedAiModel },
+                handleModelCycle
+              );
+
+              const fixedCode = extractCodeBlock(fixRes.content);
+              if (fixedCode) {
+                currentCandidate = fixedCode;
+                evalResult = await evaluateInWorker(currentCandidate);
+                usedAiModel = fixRes.usedModel;
+              }
+            } catch (fixErr) {
+              break;
+            }
+          }
+          setIsCorrecting(false);
+
           if (evalResult.success) {
-            setCurrentCode(rawCode);
+            setCurrentCode(currentCandidate);
             setNeedsVerification(true);
             setPendingVerificationPhase('base');
 
-            // Clean conversational text (strip json)
             const conversationalText = response
               .replace(/```(?:json)?\s*\{[\s\S]*?\}\s*```/g, '')
+              .replace(/```javascript[\s\S]*?```/g, '')
               .trim();
 
             addMessage({
               role: 'assistant',
               phase: 'base',
-              codeSnippet: rawCode,
+              codeSnippet: currentCandidate,
               modelUsed: usedAiModel,
               needsVerification: true,
-              content: `${conversationalText}\n\n**Apply these changes to your model?**`,
+              content: `${conversationalText ? conversationalText + '\n\n' : ''}### 3D Model Generated & Compiled in Workspace ⚡\n\n\`\`\`javascript\n${currentCandidate}\n\`\`\`\n\n**Apply these changes to your model?**`,
               suggestedOptions: ['Yes (Apply)', 'No, instead...'],
             });
             return;
           }
         }
 
-        // Clean conversational response text (strip the JSON metadata from view)
+        // Conversational response
         const conversationalText = response
           .replace(/```(?:json)?\s*\{[\s\S]*?\}\s*```/g, '')
           .trim();
 
-        // Conversational answer or clarifying question
         addMessage({
           role: 'assistant',
           phase,
@@ -509,6 +533,8 @@ export function useAiCad(config: AiCadConfig = {}) {
         });
       } finally {
         setIsLoading(false);
+        setIsCorrecting(false);
+        setFallbackNotice(null);
       }
     },
     [
@@ -577,6 +603,7 @@ export function useAiCad(config: AiCadConfig = {}) {
     setIsCorrecting(false);
     setRetryCount(0);
     setLastError(null);
+    setFallbackNotice(null);
     setNeedsVerification(false);
     setPendingVerificationPhase(null);
     setCurrentCode('');
@@ -594,6 +621,7 @@ export function useAiCad(config: AiCadConfig = {}) {
     isCorrecting,
     retryCount,
     lastError,
+    fallbackNotice,
     needsVerification,
     pendingVerificationPhase,
     currentCode,

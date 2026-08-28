@@ -3,9 +3,17 @@
  * Implements autonomous multi-model fallback & cycling across user-selected free models
  */
 
-export type OpenRouterContentPart =
-  | { type: 'text'; text: string }
-  | { type: 'image_url'; image_url: { url: string } };
+export interface OpenRouterContentPartText {
+  type: 'text';
+  text: string;
+}
+
+export interface OpenRouterContentPartImage {
+  type: 'image_url';
+  image_url: { url: string };
+}
+
+export type OpenRouterContentPart = OpenRouterContentPartText | OpenRouterContentPartImage;
 
 export interface OpenRouterMessage {
   role: 'system' | 'user' | 'assistant';
@@ -26,27 +34,24 @@ export type ModelCycleCallback = (
 ) => void;
 
 export const FREE_MODELS_PRESETS = [
-  'inclusionai/ling-3.0-flash-fin:free',
-  'dots-studio/dots-3-note-preview:free',
-  'thinkingmachines/inkling:free',
-  'thinkingmachines/inkling-small:free',
-  'poolside/laguna-s-2.1:free',
   'poolside/laguna-xs-2.1:free',
-  'cohere/north-mini-code:free',
-  'z-ai/glm-5.2:free',
-  'nvidia/nemotron-3-ultra-550b-a55b:free',
-  'minimax/minimax-m3:free',
+  'inclusionai/ling-3.0-flash-fin:free',
   'google/gemma-4-31b-it:free',
-  'minimax/minimax-m2.7:free',
   'nvidia/nemotron-3-super-120b-a12b:free',
-  'liquid/lfm-2.5-2.6b:free',
-  'nvidia/nemotron-3.5-lightning:free',
-  'meta-llama/llama-3.3-70b-instruct:free',
-  'mistralai/mistral-7b-instruct:free',
+  'minimax/minimax-m2.7:free',
+  'minimax/minimax-m3:free',
+  'dots-studio/dots-3-note-preview:free',
   'qwen/qwen-2.5-coder-32b-instruct:free',
+  'meta-llama/llama-3.3-70b-instruct:free',
+  'z-ai/glm-5.2:free',
+  'cohere/north-mini-code:free',
+  'nvidia/nemotron-3-ultra-550b-a55b:free',
+  'nvidia/nemotron-3.5-lightning:free',
+  'liquid/lfm-2.5-2.6b:free',
+  'mistralai/mistral-7b-instruct:free',
 ];
 
-export const DEFAULT_OPENROUTER_MODEL = 'inclusionai/ling-3.0-flash-fin:free';
+export const DEFAULT_OPENROUTER_MODEL = 'poolside/laguna-xs-2.1:free';
 const STORAGE_KEY_API_KEY = 'haicad_openrouter_api_key';
 const STORAGE_KEY_MODEL = 'haicad_openrouter_model';
 
@@ -63,7 +68,7 @@ export function setStoredOpenRouterKey(key: string): void {
 export function getStoredOpenRouterModel(): string {
   if (typeof window === 'undefined') return DEFAULT_OPENROUTER_MODEL;
   const stored = localStorage.getItem(STORAGE_KEY_MODEL);
-  if (!stored || stored.includes('gemma-2') || stored === 'openrouter/free') {
+  if (!stored || stored.includes('gemma-2') || stored === 'openrouter/free' || stored.includes('inkling')) {
     return DEFAULT_OPENROUTER_MODEL;
   }
   return stored;

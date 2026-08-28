@@ -83,6 +83,7 @@ export const AIChatPanel: React.FC<AIChatPanelProps> = ({ aiCad }) => {
     isLoading,
     isCorrecting,
     retryCount,
+    fallbackNotice,
     needsVerification,
     apiKey,
     model,
@@ -604,11 +605,20 @@ export const AIChatPanel: React.FC<AIChatPanelProps> = ({ aiCad }) => {
           );
         })}
 
-        {/* Loading Spinner */}
+        {/* Loading Spinner & Active Fallback Status */}
         {isLoading && (
-          <div className="flex items-center gap-2 text-xs text-slate-400 px-3 py-2 bg-surface-subtle/50 rounded-xl border border-surface-border/50 animate-pulse">
-            <RefreshCw className="w-3.5 h-3.5 animate-spin text-cyan" />
-            <span>{isCorrecting ? `Self-correcting CAD error (Attempt ${retryCount}/3)...` : 'Computing CAD geometry...'}</span>
+          <div className="flex items-center gap-2.5 text-xs text-slate-300 px-3.5 py-2.5 bg-surface-subtle/80 rounded-xl border border-cyan/30 shadow-sm animate-pulse">
+            <RefreshCw className="w-3.5 h-3.5 animate-spin text-cyan shrink-0" />
+            <div className="flex flex-col">
+              <span className="font-medium text-white">
+                {isCorrecting
+                  ? `Self-correcting CAD error (Attempt ${retryCount}/3)...`
+                  : 'Computing CAD geometry...'}
+              </span>
+              {fallbackNotice && (
+                <span className="text-[10px] text-cyan font-mono">{fallbackNotice}</span>
+              )}
+            </div>
           </div>
         )}
 

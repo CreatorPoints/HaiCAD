@@ -21,6 +21,36 @@ async function ensureOC() {
       });
       replicad.setOC(oc);
       ocInitialized = true;
+
+      // Attach standard CSG prototype aliases to Replicad Shapes
+      try {
+        const dummy = (replicad.makeBaseBox as any)(2, 2, 2);
+        const proto = Object.getPrototypeOf(dummy);
+        if (proto) {
+          if (!proto.subtract && proto.cut) {
+            proto.subtract = function (...args: any[]) {
+              return this.cut(...args);
+            };
+          }
+          if (!proto.difference && proto.cut) {
+            proto.difference = function (...args: any[]) {
+              return this.cut(...args);
+            };
+          }
+          if (!proto.union && proto.fuse) {
+            proto.union = function (...args: any[]) {
+              return this.fuse(...args);
+            };
+          }
+          if (!proto.intersection && proto.intersect) {
+            proto.intersection = function (...args: any[]) {
+              return this.intersect(...args);
+            };
+          }
+        }
+      } catch (err) {
+        console.warn('Could not attach CSG prototype polyfills:', err);
+      }
     })();
   }
   return ocInitPromise;
@@ -201,33 +231,39 @@ self.onmessage = async (e: MessageEvent) => {
           dimensions: [20, 20, 20] as [number, number, number],
         };
 
-        if (s.boundingBox) {
-          const b = s.boundingBox;
-          const min: [number, number, number] = [
-            b.bounds?.[0] ?? b.min?.x ?? -10,
-            b.bounds?.[1] ?? b.min?.y ?? -10,
-            b.bounds?.[2] ?? b.min?.z ?? -10,
-          ];
-          const max: [number, number, number] = [
-            b.bounds?.[3] ?? b.max?.x ?? 10,
-            b.bounds?.[4] ?? b.max?.y ?? 10,
-            b.bounds?.[5] ?? b.max?.z ?? 10,
-          ];
-          const center: [number, number, number] = [
-            (min[0] + max[0]) / 2,
-            (min[1] + max[1]) / 2,
-            (min[2] + max[2]) / 2,
-          ];
-          const dimensions: [number, number, number] = [
-            Math.abs(max[0] - min[0]),
-            Math.abs(max[1] - min[1]),
-            Math.abs(max[2] - min[2]),
-          ];
-          bbox = { min, max, center, dimensions };
+        try {
+          if (typeof s.boundingBox === 'function') {
+            const b = s.boundingBox();
+            if (b) {
+              const min: [number, number, number] = [
+                b.bounds?.min?.x ?? -10,
+                b.bounds?.min?.y ?? -10,
+                b.bounds?.min?.z ?? -10,
+              ];
+              const max: [number, number, number] = [
+                b.bounds?.max?.x ?? 10,
+                b.bounds?.max?.y ?? 10,
+                b.bounds?.max?.z ?? 10,
+              ];
+              const dimensions: [number, number, number] = [
+                max[0] - min[0],
+                max[1] - min[1],
+                max[2] - min[2],
+              ];
+              const center: [number, number, number] = [
+                min[0] + dimensions[0] / 2,
+                min[1] + dimensions[1] / 2,
+                min[2] + dimensions[2] / 2,
+              ];
+              bbox = { min, max, center, dimensions };
+            }
+          }
+        } catch (bboxErr) {
+          console.warn('Could not compute exact bounding box:', bboxErr);
         }
 
         meshes.push({
-          id: `mesh_${i}`,
+          id: `mesh_${i}_${Date.now()}`,
           name: item.name,
           color: item.color,
           mesh: {
@@ -243,6 +279,7 @@ self.onmessage = async (e: MessageEvent) => {
       }
 
       const executionTimeMs = performance.now() - startTime;
+
       self.postMessage({
         id,
         type: 'EVAL_SUCCESS',
@@ -253,11 +290,12 @@ self.onmessage = async (e: MessageEvent) => {
       });
     } catch (err: any) {
       const executionTimeMs = performance.now() - startTime;
+      const errorStr = err?.message || String(err);
       self.postMessage({
         id,
         type: 'EVAL_ERROR',
         payload: {
-          error: err?.message || String(err),
+          error: errorStr,
           executionTimeMs,
         },
       });
@@ -266,27 +304,44 @@ self.onmessage = async (e: MessageEvent) => {
   }
 
   if (type === 'EXPORT') {
+    const { format } = payload;
     try {
-      const { format } = payload;
+      await ensureOC();
+
       if (!lastShape) {
-        throw new Error('No shape currently loaded to export.');
+        throw new Error('No compiled shape in memory to export. Build your model first.');
       }
 
-      const shape = Array.isArray(lastShape)
-        ? (lastShape[0]?.shape || lastShape[0])
-        : (lastShape.shape || lastShape);
+      let primaryShape = lastShape;
+      if (Array.isArray(lastShape)) {
+        primaryShape = lastShape[0]?.shape || lastShape[0];
+      } else if (lastShape && lastShape.shape) {
+        primaryShape = lastShape.shape;
+      }
 
-      let blob: Blob | null = null;
-      let filename = `haicad_model_${Date.now()}`;
+      let blob: Blob;
+      let filename = `model_${Date.now()}.${format}`;
 
       if (format === 'step' || format === 'stp') {
-        blob = shape.blobSTEP();
-        filename += '.step';
+        if (typeof primaryShape.exportSTEP === 'function') {
+          const stepContent = primaryShape.exportSTEP();
+          blob = new Blob([stepContent], { type: 'application/step' });
+        } else if (typeof primaryShape.blobSTEP === 'function') {
+          blob = primaryShape.blobSTEP();
+        } else {
+          throw new Error('Shape does not support STEP export.');
+        }
       } else if (format === 'stl') {
-        blob = shape.blobSTL({ binary: true });
-        filename += '.stl';
+        if (typeof primaryShape.blobSTL === 'function') {
+          blob = primaryShape.blobSTL({ tolerance: 0.05, angularTolerance: 0.1 });
+        } else if (typeof primaryShape.exportSTL === 'function') {
+          const stlContent = primaryShape.exportSTL({ tolerance: 0.05, angularTolerance: 0.1 });
+          blob = new Blob([stlContent], { type: 'model/stl' });
+        } else {
+          throw new Error('Shape does not support STL export.');
+        }
       } else {
-        throw new Error(`Export format ${format} is not supported directly.`);
+        throw new Error(`Unsupported export format: ${format}`);
       }
 
       self.postMessage({
