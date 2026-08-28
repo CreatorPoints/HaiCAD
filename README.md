@@ -1,37 +1,39 @@
-# HaiCAD | AI-First Parametric CAD Studio ⚡
+# HaiCAD | Parametric 3D CAD Studio ⚡
 
-> **HaiCAD** is a browser-native, AI-first parametric 3D CAD generator powered by Google Gemini and OpenRouter. It transforms natural language instructions into real OpenCASCADE solid geometry with live spatial radar pings, autonomous smart model routing, and multi-format exports.
-
-![HaiCAD Studio](https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?auto=format&fit=crop&w=1200&q=80)
+> **HaiCAD** is a high-performance, browser-native parametric 3D CAD Studio powered by OpenCASCADE and WebAssembly. It provides real-time solid geometry modeling, multi-project workspace management, code-driven parametric modeling, and client-side STEP/STL exports.
 
 ---
 
 ## ✨ Features
 
-- 🛸 **Dynamic Island HUD**: Floating center island with prompt inputs, live reasoning stages, autonomous model badges, and quick action chips.
-- 🧠 **Autonomous Smart AI Model Router**: Procedurally analyzes prompt intent and geometric complexity (parametric math, complex assemblies, precision fillets, error fixing) to automatically route requests to the best available model on the Google Free Tier or OpenRouter with task-specific expert directives.
-- 🎛️ **Left Multi-Panel Activity Bar & Drawer**:
-  - 🛠️ **View Tools**: Surface shaders (Clay, Titanium, X-Ray, Wireframe), camera angles (ISO, TOP, FRONT, RIGHT), display guides, and real-time bounding box metrics.
-  - 💻 **CAD Script IDE**: Integrated Monaco Editor with bi-directional 3D viewport syncing and error diagnostics.
-  - 🌐 **Free AI Hub**: Live OpenRouter catalog querying and filtering for Free models (`:free`), Code Specialists, and Reasoning engines.
-  - 🔑 **BYOK Vault**: Unlimited multi-key storage with **smart auto-failover & rotation** on rate limits (429) or quota exhaustion.
-  - 📁 **Preset Library**: Curated parametric templates (Mounting Bracket, Flanged Pipe, Heatsink, Spur Gear).
-- 📍 **Live 3D Spatial Radar Pings**: Visual coordinate beacons and pulsing radar rings highlight the exact 3D coordinates being created, cut, or filleted in real-time.
-- ⚙️ **Browser-Native B-Rep CAD Engine**: Powered by OpenCASCADE & Replicad in a Web Worker (WebAssembly). Zero server compute required.
-- 📦 **Multi-Format Export**: Direct client-side export to standard **STEP** (`.step` / `.stp`) and **STL** (`.stl`) for 3D printing and CAD software.
-- 🔄 **Self-Healing Geometry Loop**: Automatically detects CAD compilation/boolean errors and prompts the AI for instant repair.
-- 🚀 **Firebase Hosting Ready**: Configured for Firebase Free Spark Tier hosting (`h-aicad`).
+- 🗂️ **Multi-Project Studio Architecture**:
+  - **Root Project Dashboard (`/`)**: Manage, create, search, rename, and delete CAD projects with procedural engineering slugs.
+  - **Isolated Workspaces (`/project/<id>`)**: Each project runs with isolated geometry states, OpenCASCADE scripts, and configurations.
+- ⚙️ **Browser-Native B-Rep CAD Kernel**:
+  - Powered by **OpenCASCADE.js** and **Replicad** running in dedicated Web Workers via WebAssembly.
+  - 100% client-side computation with zero server overhead.
+- 💻 **Integrated Monaco CAD Script IDE**:
+  - Full-featured code editor with syntax highlighting, automatic layout, error diagnostics, and instant live code execution.
+- 🎨 **Interactive 3D Viewport**:
+  - Rendered with Three.js and customizable shaders: **Clay**, **Metallic**, **Wireframe**, and **X-Ray**.
+  - Camera orientation presets: **ISO**, **Top (XY)**, **Front (XZ)**, **Right (YZ)**.
+  - Coordinate axes, precision grid, and edge feature-line overlays.
+- 📦 **1-Click Multi-Format CAD Export**:
+  - Direct client-side export to standard **STEP (`.step`)** B-Rep solids and **STL (`.stl`)** 3D printing meshes.
+- 🚀 **Ultra-Fast Builds & Firebase Hosting Ready**:
+  - Optimized Vite bundler setup building in under 30 seconds.
+  - Fully configured for instant deployment to Firebase Hosting (`https://h-aicad.web.app`).
 
 ---
 
 ## 🛠️ Tech Stack
 
-- **Framework**: Vite + React 18 + TypeScript
+- **Framework**: React 18 + TypeScript + Vite
 - **Styling**: Tailwind CSS + Lucide Icons
 - **CAD Kernel**: OpenCASCADE.js / Replicad (WebAssembly in Web Worker)
 - **3D Graphics**: Three.js + OrbitControls
 - **Code Editor**: Monaco Editor (`@monaco-editor/react`)
-- **AI Routing & Orchestration**: Autonomous Smart Router + Google Gemini API + OpenRouter API (Direct Client-Side BYOK)
+- **Routing & State**: HTML5 History API + LocalStorage Project Persistence
 - **Hosting**: Firebase Hosting (`https://h-aicad.web.app`)
 
 ---
@@ -57,16 +59,6 @@ npm run build
 ```bash
 firebase deploy --only hosting
 ```
-
----
-
-## 🔑 Adding API Keys (BYOK Vault)
-
-Open the **BYOK Vault** in the left sidebar to add unlimited keys for:
-1. **Google Gemini API Key**: [Get a free key from Google AI Studio](https://aistudio.google.com/app/apikey)
-2. **OpenRouter API Key**: [Get a key from OpenRouter](https://openrouter.ai/keys)
-
-Keys are saved exclusively in your browser's local storage and connect directly from your browser to the respective APIs with automatic failover and rotation.
 
 ---
 
