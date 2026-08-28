@@ -22,23 +22,45 @@ function getProjectIdFromPath(): string | null {
 }
 
 export const App: React.FC = () => {
-  // Multi-Project Router State
-  const [projects, setProjects] = useState<CADProject[]>(() => loadAllProjects());
-  const [currentProjectId, setCurrentProjectId] = useState<string | null>(() => getProjectIdFromPath());
+  // Multi-Project State
+  const [projects, setProjects] = useState<CADProject[]>(() => {
+    const loaded = loadAllProjects();
+    if (loaded.length === 0) {
+      const initial = createProject('HaiCAD Workspace');
+      return [initial];
+    }
+    return loaded;
+  });
+
+  const [currentProjectId, setCurrentProjectId] = useState<string>(() => {
+    const fromPath = getProjectIdFromPath();
+    if (fromPath) return fromPath;
+    const all = loadAllProjects();
+    return all.length > 0 ? all[0].id : 'default-workspace';
+  });
+
+  const [viewMode, setViewMode] = useState<'workspace' | 'dashboard'>(() => {
+    // If URL is explicitly root '/' and has no project in path, but user visits, default to workspace so AI chat is immediately accessible
+    return 'workspace';
+  });
 
   // Listen to browser Back/Forward buttons
   useEffect(() => {
     const handlePopState = () => {
-      setCurrentProjectId(getProjectIdFromPath());
+      const fromPath = getProjectIdFromPath();
+      if (fromPath) {
+        setCurrentProjectId(fromPath);
+        setViewMode('workspace');
+      } else {
+        setViewMode('dashboard');
+      }
     };
     window.addEventListener('popstate', handlePopState);
     return () => window.removeEventListener('popstate', handlePopState);
   }, []);
 
   // Current Active Project
-  const currentProject = currentProjectId
-    ? projects.find((p) => p.id === currentProjectId) || null
-    : null;
+  const currentProject = projects.find((p) => p.id === currentProjectId) || projects[0];
 
   // CAD Script & Geometry State
   const [code, setCode] = useState<string>(() => currentProject?.code || DEFAULT_PROJECT_CODE);
@@ -62,7 +84,7 @@ export const App: React.FC = () => {
     }
   }, [aiCad.meshes]);
 
-  // Left Sidebar State (Defaults to 'ai_chat' open)
+  // Left Sidebar State (Defaults to 'ai_chat' OPEN)
   const [activeSidebarTab, setActiveSidebarTab] = useState<SidebarTab | null>('ai_chat');
 
   // Viewport Display Settings
@@ -116,17 +138,19 @@ export const App: React.FC = () => {
         meshCount: meshes.length,
       });
     }
-  }, [code, meshes.length, currentProjectId]);
+  }, [code, meshes.length, currentProjectId, currentProject]);
 
   // Navigation Handlers
   const handleOpenProject = (id: string) => {
     window.history.pushState({}, '', `/project/${id}`);
     setCurrentProjectId(id);
+    setViewMode('workspace');
+    setActiveSidebarTab('ai_chat');
   };
 
   const handleGoToDashboard = () => {
     window.history.pushState({}, '', '/');
-    setCurrentProjectId(null);
+    setViewMode('dashboard');
     setProjects(loadAllProjects());
   };
 
@@ -140,8 +164,8 @@ export const App: React.FC = () => {
   const handleDeleteProject = (id: string) => {
     const updated = deleteProject(id);
     setProjects(updated);
-    if (currentProjectId === id) {
-      handleGoToDashboard();
+    if (currentProjectId === id && updated.length > 0) {
+      handleOpenProject(updated[0].id);
     }
   };
 
@@ -174,8 +198,8 @@ export const App: React.FC = () => {
     }
   };
 
-  // IF ON ROOT DASHBOARD (/ or index.html)
-  if (!currentProjectId) {
+  // DASHBOARD VIEW
+  if (viewMode === 'dashboard') {
     return (
       <ProjectDashboard
         projects={projects}
@@ -187,12 +211,15 @@ export const App: React.FC = () => {
     );
   }
 
-  // IF INSIDE A PROJECT WORKSPACE (/project/:id)
+  // WORKSPACE VIEW (AI Chat Area open by default on the left)
   return (
     <div className="flex flex-col w-screen h-screen bg-[#070a12] text-slate-100 overflow-hidden select-none font-sans">
       {/* 1. Header Bar */}
       <HeaderNavbar
-        onOpenTab={(tab) => setActiveSidebarTab(tab)}
+        onOpenTab={(tab) => {
+          setActiveSidebarTab(tab);
+          setViewMode('workspace');
+        }}
         activeTab={activeSidebarTab}
         onExport={handleExport}
         isExporting={isExporting}
@@ -204,7 +231,7 @@ export const App: React.FC = () => {
 
       {/* 2. Main Studio Workspace */}
       <div className="flex-1 flex w-full h-[calc(100vh-3.5rem)] overflow-hidden relative">
-        {/* Left Activity Bar + Collapsible Drawer */}
+        {/* Left Activity Bar + AI Chat Drawer */}
         <LeftSidebar
           activeTab={activeSidebarTab}
           onSelectTab={setActiveSidebarTab}
