@@ -963,7 +963,7 @@ export async function generateCADCode(params: GenerateCADParams): Promise<Genera
 
         textResponse = await readGeminiSSEStream(res, onTokenStream, onLivePing);
       } else {
-        // OpenRouter SSE Stream
+        // OpenRouter SSE Stream with fast provider routing and 10s fast-failover
         let modelToCall = activeModelForAttempt;
         let res = await fetchWithTimeout('https://openrouter.ai/api/v1/chat/completions', {
           method: 'POST',
@@ -976,25 +976,29 @@ export async function generateCADCode(params: GenerateCADParams): Promise<Genera
           body: JSON.stringify({
             model: modelToCall,
             stream: true,
+            provider: {
+              order: ['DeepInfra', 'Together', 'Novita', 'Groq', 'Hyperbolic', 'Nebius'],
+              allow_fallbacks: true,
+            },
             messages: [
               { role: 'system', content: fullSystemPrompt },
               { role: 'user', content: userContent },
             ],
             temperature: 0.2,
           }),
-        }, 25000);
+        }, 10000);
 
-        // If OpenRouter model fails, cascade through other free OpenRouter models
+        // If OpenRouter model fails or hangs, cascade quickly through fastest free OpenRouter models
         if (!res.ok) {
           const fallbackORModels = [
-            'cohere/north-mini-code:free',
-            'nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free',
             'google/gemma-4-31b-it:free',
+            'meta-llama/llama-3.3-70b-instruct:free',
+            'cohere/north-mini-code:free',
             'openrouter/free',
           ];
           for (const fallbackModel of fallbackORModels) {
             if (fallbackModel === modelToCall) continue;
-            onStepProgress?.(`Auto-fallback to OpenRouter ${fallbackModel}...`);
+            onStepProgress?.(`Auto-fallback to fast OpenRouter model ${fallbackModel}...`);
             modelToCall = fallbackModel;
             res = await fetchWithTimeout('https://openrouter.ai/api/v1/chat/completions', {
               method: 'POST',
@@ -1007,13 +1011,17 @@ export async function generateCADCode(params: GenerateCADParams): Promise<Genera
               body: JSON.stringify({
                 model: modelToCall,
                 stream: true,
+                provider: {
+                  order: ['DeepInfra', 'Together', 'Novita', 'Groq', 'Hyperbolic'],
+                  allow_fallbacks: true,
+                },
                 messages: [
                   { role: 'system', content: fullSystemPrompt },
                   { role: 'user', content: userContent },
                 ],
                 temperature: 0.2,
               }),
-            }, 25000);
+            }, 10000);
             if (res.ok) break;
           }
         }
