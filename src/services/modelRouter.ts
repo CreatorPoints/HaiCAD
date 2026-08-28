@@ -45,25 +45,25 @@ export interface ModelCapabilityProfile {
 export const MODEL_CAPABILITY_PROFILES: ModelCapabilityProfile[] = [
   // --- Google Gemini Verified Free Tier Models (15 RPM / 1,500 RPD) ---
   {
-    id: 'gemini-3.7-flash',
-    name: 'Gemini 3.7 Flash (Hybrid Free Tier)',
-    provider: 'gemini',
-    isFree: true,
-    isReasoningSpecialist: true,
-    isCodeSpecialist: true,
-    speedScore: 10,
-    priorityRank: 1, // Best overall: complex CSG booleans, math, and code
-    allowedModes: ['CODE_IMPLEMENTATION', 'REASONING', 'KERNEL_REPAIR', 'QUESTION_EXPLANATION'],
-  },
-  {
     id: 'gemini-3.6-flash',
     name: 'Gemini 3.6 Flash (Next-Gen Free Tier)',
     provider: 'gemini',
     isFree: true,
     isReasoningSpecialist: true,
     isCodeSpecialist: true,
+    speedScore: 10,
+    priorityRank: 1, // Primary Workhorse: Ultra-reliable, high-throughput, low-latency code generation
+    allowedModes: ['CODE_IMPLEMENTATION', 'REASONING', 'KERNEL_REPAIR', 'QUESTION_EXPLANATION'],
+  },
+  {
+    id: 'gemini-2.5-flash',
+    name: 'Gemini 2.5 Flash (Stable Free Tier)',
+    provider: 'gemini',
+    isFree: true,
+    isReasoningSpecialist: true,
+    isCodeSpecialist: true,
     speedScore: 9.8,
-    priorityRank: 2, // Low-latency script generation & instant edits
+    priorityRank: 2, // Stable workhorse fallback
     allowedModes: ['CODE_IMPLEMENTATION', 'REASONING', 'QUESTION_EXPLANATION'],
   },
   {
@@ -76,6 +76,17 @@ export const MODEL_CAPABILITY_PROFILES: ModelCapabilityProfile[] = [
     speedScore: 9.5,
     priorityRank: 3, // Reliable fallback code execution
     allowedModes: ['CODE_IMPLEMENTATION', 'REASONING', 'KERNEL_REPAIR'],
+  },
+  {
+    id: 'gemini-3.7-flash',
+    name: 'Gemini 3.7 Flash (Hybrid Free Tier)',
+    provider: 'gemini',
+    isFree: true,
+    isReasoningSpecialist: true,
+    isCodeSpecialist: true,
+    speedScore: 9.5,
+    priorityRank: 4, // Deep hybrid reasoning & step-by-step CAD math
+    allowedModes: ['CODE_IMPLEMENTATION', 'REASONING', 'KERNEL_REPAIR', 'QUESTION_EXPLANATION'],
   },
   {
     id: 'gemini-3.5-flash-lite',
