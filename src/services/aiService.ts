@@ -449,6 +449,7 @@ export interface GenerateCADParams {
   geminiKey?: string;
   openrouterKey?: string;
   onStepProgress?: (step: string) => void;
+  onTokenStream?: (accumulatedText: string, newChunk: string) => void;
   onLivePing?: (ping: AIPingLocation) => void;
   onKeyRotated?: (event: KeyRotationEvent) => void;
   onKeyPoolUpdated?: (updatedPool: APIKeyEntry[]) => void;
@@ -482,6 +483,121 @@ async function fetchWithTimeout(url: string, options: RequestInit, timeoutMs = 2
   }
 }
 
+export function extractSpatialPings(text: string): AIPingLocation[] {
+  const pings: AIPingLocation[] = [];
+  const pingRegex = /\/\/\s*\[PING:\s*(\{[\s\S]*?\})\s*\]/g;
+  let match: RegExpExecArray | null;
+  while ((match = pingRegex.exec(text)) !== null) {
+    try {
+      const pingData = JSON.parse(match[1]);
+      pings.push({
+        id: 'ping_' + Math.random().toString(36).substring(2, 9),
+        name: pingData.name || 'CAD Feature',
+        action: pingData.action || 'Modifying geometry',
+        position: Array.isArray(pingData.position) ? pingData.position : [0, 0, 0],
+        timestamp: Date.now(),
+      });
+    } catch {}
+  }
+  return pings;
+}
+
+async function readGeminiSSEStream(
+  response: Response,
+  onChunk?: (accumulated: string, chunk: string) => void,
+  onLivePing?: (ping: AIPingLocation) => void
+): Promise<string> {
+  const reader = response.body?.getReader();
+  if (!reader) throw new Error('Gemini response stream is not readable');
+
+  const decoder = new TextDecoder('utf-8');
+  let accumulatedText = '';
+  let buffer = '';
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+
+    buffer += decoder.decode(value, { stream: true });
+    const lines = buffer.split('\n');
+    buffer = lines.pop() || '';
+
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (!trimmed.startsWith('data:')) continue;
+      const jsonStr = trimmed.replace(/^data:\s*/, '').trim();
+      if (!jsonStr || jsonStr === '[DONE]') continue;
+
+      try {
+        const parsed = JSON.parse(jsonStr);
+        const chunkText = parsed.candidates?.[0]?.content?.parts?.[0]?.text || '';
+        if (chunkText) {
+          accumulatedText += chunkText;
+          onChunk?.(accumulatedText, chunkText);
+
+          if (chunkText.includes('// [PING:') && onLivePing) {
+            const pings = extractSpatialPings(accumulatedText);
+            const latestPing = pings[pings.length - 1];
+            if (latestPing) onLivePing(latestPing);
+          }
+        }
+      } catch {
+        // partial json frame ignored
+      }
+    }
+  }
+
+  return accumulatedText;
+}
+
+async function readOpenRouterSSEStream(
+  response: Response,
+  onChunk?: (accumulated: string, chunk: string) => void,
+  onLivePing?: (ping: AIPingLocation) => void
+): Promise<string> {
+  const reader = response.body?.getReader();
+  if (!reader) throw new Error('OpenRouter response stream is not readable');
+
+  const decoder = new TextDecoder('utf-8');
+  let accumulatedText = '';
+  let buffer = '';
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+
+    buffer += decoder.decode(value, { stream: true });
+    const lines = buffer.split('\n');
+    buffer = lines.pop() || '';
+
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (!trimmed.startsWith('data:')) continue;
+      const jsonStr = trimmed.replace(/^data:\s*/, '').trim();
+      if (!jsonStr || jsonStr === '[DONE]') continue;
+
+      try {
+        const parsed = JSON.parse(jsonStr);
+        const chunkText = parsed.choices?.[0]?.delta?.content || '';
+        if (chunkText) {
+          accumulatedText += chunkText;
+          onChunk?.(accumulatedText, chunkText);
+
+          if (chunkText.includes('// [PING:') && onLivePing) {
+            const pings = extractSpatialPings(accumulatedText);
+            const latestPing = pings[pings.length - 1];
+            if (latestPing) onLivePing(latestPing);
+          }
+        }
+      } catch {
+        // partial json ignored
+      }
+    }
+  }
+
+  return accumulatedText;
+}
+
 // Generate CAD code with automatic failover and key rotation
 export async function generateCADCode(params: GenerateCADParams): Promise<GenerateCADResult> {
   const {
@@ -492,6 +608,7 @@ export async function generateCADCode(params: GenerateCADParams): Promise<Genera
     geminiKey,
     openrouterKey,
     onStepProgress,
+    onTokenStream,
     onLivePing,
     onKeyRotated,
     onKeyPoolUpdated,
@@ -593,7 +710,7 @@ export async function generateCADCode(params: GenerateCADParams): Promise<Genera
 
       if (provider === 'gemini') {
         let modelToCall = effectiveModel;
-        let apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${modelToCall}:generateContent?key=${candidateKey.key.trim()}`;
+        let apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${modelToCall}:streamGenerateContent?alt=sse&key=${candidateKey.key.trim()}`;
         let res = await fetchWithTimeout(apiUrl, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -604,16 +721,16 @@ export async function generateCADCode(params: GenerateCADParams): Promise<Genera
               maxOutputTokens: 4096,
             },
           }),
-        }, 20000);
+        }, 25000);
 
         // If model hit limit:0, rate limit (429), or error, auto-cascade through verified working free tier flash endpoints
         if (!res.ok) {
-          const fallbackModels = ['gemini-3.7-flash', 'gemini-3.6-flash', 'gemini-3.5-flash', 'gemini-2.5-flash'];
+          const fallbackModels = ['gemini-3.6-flash', 'gemini-2.5-flash', 'gemini-3.5-flash', 'gemini-3.7-flash'];
           for (const fallbackModel of fallbackModels) {
             if (fallbackModel === modelToCall) continue;
             onStepProgress?.(`Auto-fallback to ${fallbackModel} (Free Tier)...`);
             modelToCall = fallbackModel;
-            apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${modelToCall}:generateContent?key=${candidateKey.key.trim()}`;
+            apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${modelToCall}:streamGenerateContent?alt=sse&key=${candidateKey.key.trim()}`;
             res = await fetchWithTimeout(apiUrl, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
@@ -624,7 +741,7 @@ export async function generateCADCode(params: GenerateCADParams): Promise<Genera
                   maxOutputTokens: 4096,
                 },
               }),
-            }, 20000);
+            }, 25000);
             if (res.ok) break;
           }
         }
@@ -641,10 +758,9 @@ export async function generateCADCode(params: GenerateCADParams): Promise<Genera
           };
         }
 
-        const data = await res.json();
-        textResponse = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+        textResponse = await readGeminiSSEStream(res, onTokenStream, onLivePing);
       } else {
-        // OpenRouter
+        // OpenRouter SSE Stream
         const res = await fetchWithTimeout('https://openrouter.ai/api/v1/chat/completions', {
           method: 'POST',
           headers: {
@@ -655,6 +771,7 @@ export async function generateCADCode(params: GenerateCADParams): Promise<Genera
           },
           body: JSON.stringify({
             model: effectiveModel,
+            stream: true,
             messages: [
               { role: 'system', content: fullSystemPrompt },
               { role: 'user', content: userContent },
@@ -679,8 +796,7 @@ export async function generateCADCode(params: GenerateCADParams): Promise<Genera
           };
         }
 
-        const data = await res.json();
-        textResponse = data.choices?.[0]?.message?.content || '';
+        textResponse = await readOpenRouterSSEStream(res, onTokenStream, onLivePing);
       }
 
       // If we made it here, call succeeded!

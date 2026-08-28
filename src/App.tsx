@@ -136,6 +136,13 @@ export const App: React.FC = () => {
         onStepProgress: (step) => {
           setCurrentStep(step);
         },
+        onTokenStream: (accumulated, chunk) => {
+          // Live stream tokens into the code editor in real-time
+          const codeMatch = accumulated.match(/```(?:javascript|js)?\s*([\s\S]*?)(?:```|$)/);
+          if (codeMatch && codeMatch[1].trim()) {
+            setCode(codeMatch[1]);
+          }
+        },
         onLivePing: (ping) => {
           setActivePings((prev) => [...prev.slice(-3), ping]);
         },
