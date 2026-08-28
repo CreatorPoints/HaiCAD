@@ -43,108 +43,29 @@ export interface ModelCapabilityProfile {
  * Zero-quota / preview endpoints (like gemini-3.1-pro with limit:0) are strictly excluded.
  */
 export const MODEL_CAPABILITY_PROFILES: ModelCapabilityProfile[] = [
-  // --- Google Gemini Verified Free Tier Models (15 RPM / 1,500 RPD) ---
+  // --- 1. OpenRouter 100% Free Tier Models (Lowest to Highest Model Number) ---
   {
-    id: 'gemini-3.6-flash',
-    name: 'Gemini 3.6 Flash (Next-Gen Free Tier)',
-    provider: 'gemini',
-    isFree: true,
-    isReasoningSpecialist: true,
-    isCodeSpecialist: true,
-    speedScore: 10,
-    priorityRank: 1, // Primary Workhorse: Ultra-reliable, high-throughput, low-latency code generation
-    allowedModes: ['CODE_IMPLEMENTATION', 'REASONING', 'KERNEL_REPAIR', 'QUESTION_EXPLANATION'],
-  },
-  {
-    id: 'gemini-2.5-flash',
-    name: 'Gemini 2.5 Flash (Stable Free Tier)',
-    provider: 'gemini',
-    isFree: true,
-    isReasoningSpecialist: true,
-    isCodeSpecialist: true,
-    speedScore: 9.8,
-    priorityRank: 2, // Stable workhorse fallback
-    allowedModes: ['CODE_IMPLEMENTATION', 'REASONING', 'QUESTION_EXPLANATION'],
-  },
-  {
-    id: 'gemini-3.5-flash',
-    name: 'Gemini 3.5 Flash (Workhorse Free Tier)',
-    provider: 'gemini',
-    isFree: true,
-    isReasoningSpecialist: true,
-    isCodeSpecialist: true,
-    speedScore: 9.5,
-    priorityRank: 3, // Reliable fallback code execution
-    allowedModes: ['CODE_IMPLEMENTATION', 'REASONING', 'KERNEL_REPAIR'],
-  },
-  {
-    id: 'gemini-3.7-flash',
-    name: 'Gemini 3.7 Flash (Hybrid Free Tier)',
-    provider: 'gemini',
-    isFree: true,
-    isReasoningSpecialist: true,
-    isCodeSpecialist: true,
-    speedScore: 9.5,
-    priorityRank: 4, // Deep hybrid reasoning & step-by-step CAD math
-    allowedModes: ['CODE_IMPLEMENTATION', 'REASONING', 'KERNEL_REPAIR', 'QUESTION_EXPLANATION'],
-  },
-  {
-    id: 'gemini-3.5-flash-lite',
-    name: 'Gemini 3.5 Flash-Lite (Ultra-Fast Free Tier)',
-    provider: 'gemini',
+    id: 'meta-llama/llama-3.1-8b-instruct:free',
+    name: 'Meta Llama 3.1 8B (100% Free)',
+    provider: 'openrouter',
     isFree: true,
     isReasoningSpecialist: false,
     isCodeSpecialist: true,
-    speedScore: 9.9,
-    priorityRank: 4, // Fast parameter changes & primitive drafting
+    speedScore: 10,
+    priorityRank: 1, // OpenRouter Lowest Number Model (8B)
     allowedModes: ['CODE_IMPLEMENTATION', 'QUESTION_EXPLANATION'],
   },
   {
-    id: 'gemini-3.1-flash-lite',
-    name: 'Gemini 3.1 Flash-Lite (High-Throughput Free Tier)',
-    provider: 'gemini',
-    isFree: true,
-    isReasoningSpecialist: false,
-    isCodeSpecialist: true,
-    speedScore: 9.9,
-    priorityRank: 5, // Quick geometry edits & background agent routing
-    allowedModes: ['CODE_IMPLEMENTATION'],
-  },
-  {
-    id: 'gemini-2.5-flash',
-    name: 'Gemini 2.5 Flash (Stable Free Tier)',
-    provider: 'gemini',
+    id: 'mistralai/mistral-small-24b-instruct-2501:free',
+    name: 'Mistral Small 24B (100% Free)',
+    provider: 'openrouter',
     isFree: true,
     isReasoningSpecialist: true,
-    isCodeSpecialist: true,
-    speedScore: 9.0,
-    priorityRank: 6, // Stable fallback generation
-    allowedModes: ['CODE_IMPLEMENTATION', 'REASONING', 'QUESTION_EXPLANATION'],
-  },
-  {
-    id: 'gemini-2.5-flash-lite',
-    name: 'Gemini 2.5 Flash-Lite (Low-Latency Free Tier)',
-    provider: 'gemini',
-    isFree: true,
-    isReasoningSpecialist: false,
     isCodeSpecialist: true,
     speedScore: 9.5,
-    priorityRank: 7, // Fast token output with minimal overhead
-    allowedModes: ['CODE_IMPLEMENTATION'],
+    priorityRank: 2, // OpenRouter 24B Model
+    allowedModes: ['CODE_IMPLEMENTATION', 'REASONING', 'KERNEL_REPAIR', 'QUESTION_EXPLANATION'],
   },
-  {
-    id: 'gemma-4-31b-it',
-    name: 'Gemma 4 31B (Google Open Weights Free Tier)',
-    provider: 'gemini',
-    isFree: true,
-    isReasoningSpecialist: true,
-    isCodeSpecialist: true,
-    speedScore: 8.5,
-    priorityRank: 8, // Open-weights mathematical & constraint reasoning
-    allowedModes: ['REASONING', 'CODE_IMPLEMENTATION', 'QUESTION_EXPLANATION'],
-  },
-
-  // --- OpenRouter 100% Free Reasoning Specialists (:free) ---
   {
     id: 'nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free',
     name: 'NVIDIA Nemotron 3 Reasoning (100% Free)',
@@ -153,11 +74,20 @@ export const MODEL_CAPABILITY_PROFILES: ModelCapabilityProfile[] = [
     isReasoningSpecialist: true,
     isCodeSpecialist: false,
     speedScore: 8.5,
-    priorityRank: 9,
+    priorityRank: 3, // OpenRouter 30B Reasoning Model
     allowedModes: ['REASONING', 'KERNEL_REPAIR'],
   },
-
-  // --- OpenRouter 100% Free Code Specialists (:free) ---
+  {
+    id: 'google/gemma-4-31b-it:free',
+    name: 'Google Gemma 4 31B (100% Free)',
+    provider: 'openrouter',
+    isFree: true,
+    isReasoningSpecialist: true,
+    isCodeSpecialist: true,
+    speedScore: 9.0,
+    priorityRank: 4, // OpenRouter 31B Model
+    allowedModes: ['CODE_IMPLEMENTATION', 'REASONING', 'QUESTION_EXPLANATION'],
+  },
   {
     id: 'cohere/north-mini-code:free',
     name: 'Cohere North Mini Code (100% Free)',
@@ -166,19 +96,19 @@ export const MODEL_CAPABILITY_PROFILES: ModelCapabilityProfile[] = [
     isReasoningSpecialist: false,
     isCodeSpecialist: true,
     speedScore: 9.5,
-    priorityRank: 10,
+    priorityRank: 5, // OpenRouter Code Specialist
     allowedModes: ['CODE_IMPLEMENTATION', 'KERNEL_REPAIR'],
   },
   {
-    id: 'google/gemma-4-31b-it:free',
-    name: 'Google Gemma 4 31B (100% Free)',
+    id: 'meta-llama/llama-3.3-70b-instruct:free',
+    name: 'Meta Llama 3.3 70B (100% Free)',
     provider: 'openrouter',
     isFree: true,
-    isReasoningSpecialist: false,
+    isReasoningSpecialist: true,
     isCodeSpecialist: true,
-    speedScore: 8.0,
-    priorityRank: 11,
-    allowedModes: ['CODE_IMPLEMENTATION', 'QUESTION_EXPLANATION'],
+    speedScore: 8.5,
+    priorityRank: 6, // OpenRouter 70B Model
+    allowedModes: ['CODE_IMPLEMENTATION', 'REASONING', 'KERNEL_REPAIR', 'QUESTION_EXPLANATION'],
   },
   {
     id: 'z-ai/glm-5.2:free',
@@ -188,7 +118,7 @@ export const MODEL_CAPABILITY_PROFILES: ModelCapabilityProfile[] = [
     isReasoningSpecialist: true,
     isCodeSpecialist: false,
     speedScore: 8.0,
-    priorityRank: 12,
+    priorityRank: 7, // OpenRouter High-Parameter Reasoning
     allowedModes: ['REASONING'],
   },
   {
@@ -199,8 +129,98 @@ export const MODEL_CAPABILITY_PROFILES: ModelCapabilityProfile[] = [
     isReasoningSpecialist: false,
     isCodeSpecialist: true,
     speedScore: 8.0,
-    priorityRank: 13,
+    priorityRank: 8,
     allowedModes: ['CODE_IMPLEMENTATION', 'QUESTION_EXPLANATION'],
+  },
+
+  // --- 2. Google Gemini Free Tier Models (Lowest to Highest Model Number: 2.5 -> 3.1 -> 3.5 -> 3.6 -> 3.7) ---
+  {
+    id: 'gemini-2.5-flash-lite',
+    name: 'Gemini 2.5 Flash-Lite (Low-Latency Free Tier)',
+    provider: 'gemini',
+    isFree: true,
+    isReasoningSpecialist: false,
+    isCodeSpecialist: true,
+    speedScore: 10,
+    priorityRank: 9, // Lowest Gemini Number
+    allowedModes: ['CODE_IMPLEMENTATION'],
+  },
+  {
+    id: 'gemini-2.5-flash',
+    name: 'Gemini 2.5 Flash (Stable Free Tier)',
+    provider: 'gemini',
+    isFree: true,
+    isReasoningSpecialist: true,
+    isCodeSpecialist: true,
+    speedScore: 9.8,
+    priorityRank: 10, // Gemini 2.5 Flash
+    allowedModes: ['CODE_IMPLEMENTATION', 'REASONING', 'QUESTION_EXPLANATION'],
+  },
+  {
+    id: 'gemini-3.1-flash-lite',
+    name: 'Gemini 3.1 Flash-Lite (High-Throughput Free Tier)',
+    provider: 'gemini',
+    isFree: true,
+    isReasoningSpecialist: false,
+    isCodeSpecialist: true,
+    speedScore: 9.9,
+    priorityRank: 11, // Gemini 3.1
+    allowedModes: ['CODE_IMPLEMENTATION'],
+  },
+  {
+    id: 'gemini-3.5-flash-lite',
+    name: 'Gemini 3.5 Flash-Lite (Ultra-Fast Free Tier)',
+    provider: 'gemini',
+    isFree: true,
+    isReasoningSpecialist: false,
+    isCodeSpecialist: true,
+    speedScore: 9.9,
+    priorityRank: 12, // Gemini 3.5 Lite
+    allowedModes: ['CODE_IMPLEMENTATION', 'QUESTION_EXPLANATION'],
+  },
+  {
+    id: 'gemini-3.5-flash',
+    name: 'Gemini 3.5 Flash (Workhorse Free Tier)',
+    provider: 'gemini',
+    isFree: true,
+    isReasoningSpecialist: true,
+    isCodeSpecialist: true,
+    speedScore: 9.5,
+    priorityRank: 13, // Gemini 3.5 Flash
+    allowedModes: ['CODE_IMPLEMENTATION', 'REASONING', 'KERNEL_REPAIR'],
+  },
+  {
+    id: 'gemini-3.6-flash',
+    name: 'Gemini 3.6 Flash (Next-Gen Free Tier)',
+    provider: 'gemini',
+    isFree: true,
+    isReasoningSpecialist: true,
+    isCodeSpecialist: true,
+    speedScore: 10,
+    priorityRank: 14, // Gemini 3.6 Flash
+    allowedModes: ['CODE_IMPLEMENTATION', 'REASONING', 'KERNEL_REPAIR', 'QUESTION_EXPLANATION'],
+  },
+  {
+    id: 'gemini-3.7-flash',
+    name: 'Gemini 3.7 Flash (Hybrid Free Tier)',
+    provider: 'gemini',
+    isFree: true,
+    isReasoningSpecialist: true,
+    isCodeSpecialist: true,
+    speedScore: 9.5,
+    priorityRank: 15, // Gemini 3.7 Flash
+    allowedModes: ['CODE_IMPLEMENTATION', 'REASONING', 'KERNEL_REPAIR', 'QUESTION_EXPLANATION'],
+  },
+  {
+    id: 'gemma-4-31b-it',
+    name: 'Gemma 4 31B (Google Open Weights Free Tier)',
+    provider: 'gemini',
+    isFree: true,
+    isReasoningSpecialist: true,
+    isCodeSpecialist: true,
+    speedScore: 8.5,
+    priorityRank: 16,
+    allowedModes: ['REASONING', 'CODE_IMPLEMENTATION', 'QUESTION_EXPLANATION'],
   },
 ];
 

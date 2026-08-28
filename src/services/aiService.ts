@@ -69,151 +69,173 @@ export interface KeyRotationEvent {
   reason: string;
 }
 
-// Default curated models
 // Default strictly 100% free curated models
 export const DEFAULT_MODELS: AIModelOption[] = [
   {
     id: 'auto-smart',
-    name: '⚡ Auto Smart Router (100% Free)',
-    provider: 'gemini',
-    badge: 'Autonomous',
+    name: 'Autonomous Smart Router (100% Free)',
+    provider: 'openrouter',
+    badge: 'Auto Smart Free',
     recommended: true,
     isFree: true,
     isCodeSuited: true,
     isReasoning: true,
-    description: 'Intelligently routes every task to the optimal 100% free reasoning or code specialist model.',
+    description: 'Intelligently prioritizes fast OpenRouter free models first, with instant failover to Gemini free models.',
+  },
+  // --- 1. OpenRouter 100% Free Tier Models (Lowest to Highest Model Number) ---
+  {
+    id: 'meta-llama/llama-3.1-8b-instruct:free',
+    name: 'Meta Llama 3.1 8B (100% Free)',
+    provider: 'openrouter',
+    badge: 'Free 8B (Ultra Fast)',
+    isFree: true,
+    isCodeSuited: true,
+    description: 'Lowest parameter open model on OpenRouter, highly optimized for zero-latency execution.',
   },
   {
-    id: 'gemini-3.6-flash',
-    name: 'Gemini 3.6 Flash (Next-Gen Free Tier)',
-    provider: 'gemini',
-    badge: 'Ultra Fast Workhorse',
-    recommended: true,
+    id: 'mistralai/mistral-small-24b-instruct-2501:free',
+    name: 'Mistral Small 24B (100% Free)',
+    provider: 'openrouter',
+    badge: 'Free 24B',
+    isFree: true,
     isCodeSuited: true,
     isReasoning: true,
+    description: 'High-speed 24B parameter instruction model on OpenRouter.',
+  },
+  {
+    id: 'nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free',
+    name: 'NVIDIA Nemotron 3 Reasoning (100% Free)',
+    provider: 'openrouter',
+    badge: 'Free 30B Reasoning',
     isFree: true,
-    description: 'Ultra-fast, high-throughput model for instant parametric CAD generation and edits (~15 RPM / 1,500 RPD).',
+    isReasoning: true,
+    description: 'Free NVIDIA reasoning model on OpenRouter for geometric constraint calculations.',
+  },
+  {
+    id: 'google/gemma-4-31b-it:free',
+    name: 'Google Gemma 4 31B (100% Free)',
+    provider: 'openrouter',
+    badge: 'Free 31B Gemma',
+    isFree: true,
+    isCodeSuited: true,
+    isReasoning: true,
+    description: 'Free high-parameter instruction model on OpenRouter with broad mathematical capabilities.',
+  },
+  {
+    id: 'cohere/north-mini-code:free',
+    name: 'Cohere North Mini Code (100% Free)',
+    provider: 'openrouter',
+    badge: 'Free Code Specialist',
+    isFree: true,
+    isCodeSuited: true,
+    description: 'Free code-specialized model on OpenRouter, ideal for CAD scripting at zero cost.',
+  },
+  {
+    id: 'meta-llama/llama-3.3-70b-instruct:free',
+    name: 'Meta Llama 3.3 70B (100% Free)',
+    provider: 'openrouter',
+    badge: 'Free 70B High IQ',
+    isFree: true,
+    isCodeSuited: true,
+    isReasoning: true,
+    description: 'Flagship open weights model on OpenRouter for complex multi-step CAD assemblies.',
+  },
+  {
+    id: 'z-ai/glm-5.2:free',
+    name: 'Z.ai GLM 5.2 (100% Free)',
+    provider: 'openrouter',
+    badge: 'Free GLM 5.2',
+    isFree: true,
+    isReasoning: true,
+    description: 'Free high-parameter reasoning model on OpenRouter for mathematical analysis.',
+  },
+  {
+    id: 'openrouter/free',
+    name: 'OpenRouter Free Router (100% Free)',
+    provider: 'openrouter',
+    badge: 'Auto Free Router',
+    isFree: true,
+    isCodeSuited: true,
+    description: 'Automatically routes requests to currently active free models on OpenRouter.',
+  },
+
+  // --- 2. Google Gemini Free Tier Models (Lowest to Highest Model Number: 2.5 -> 3.1 -> 3.5 -> 3.6 -> 3.7) ---
+  {
+    id: 'gemini-2.5-flash-lite',
+    name: 'Gemini 2.5 Flash-Lite (Low-Latency Free Tier)',
+    provider: 'gemini',
+    badge: 'Free 2.5 Lite',
+    isCodeSuited: true,
+    isFree: true,
+    description: 'Lowest model number Gemini endpoint for instant parameter drafting (~15 RPM / 1,500 RPD).',
   },
   {
     id: 'gemini-2.5-flash',
     name: 'Gemini 2.5 Flash (Stable Free Tier)',
     provider: 'gemini',
-    badge: 'Free Stable',
+    badge: 'Free 2.5 Flash',
     isCodeSuited: true,
     isReasoning: true,
     isFree: true,
-    description: 'Stable legacy Flash model for general-purpose fallback generation.',
+    description: 'Stable legacy Flash model for general-purpose CAD generation (~10 RPM / 250 RPD).',
   },
   {
-    id: 'gemini-3.7-flash',
-    name: 'Gemini 3.7 Flash (Hybrid Free Tier)',
+    id: 'gemini-3.1-flash-lite',
+    name: 'Gemini 3.1 Flash-Lite (High-Throughput Free Tier)',
     provider: 'gemini',
-    badge: 'Hybrid Reasoning',
+    badge: 'Free 3.1 Lite',
     isCodeSuited: true,
-    isReasoning: true,
     isFree: true,
-    description: 'Deep hybrid reasoning model for complex CSG booleans and step-by-step CAD math (~15 RPM / 1,500 RPD).',
+    description: 'High-throughput subagent model for quick geometry edits (~15 RPM / 1,500 RPD).',
+  },
+  {
+    id: 'gemini-3.5-flash-lite',
+    name: 'Gemini 3.5 Flash-Lite (Ultra-Fast Free Tier)',
+    provider: 'gemini',
+    badge: 'Free 3.5 Lite',
+    isCodeSuited: true,
+    isFree: true,
+    description: 'Ultra-fast lightweight model for parameter modifications & primitive drafting (~15 RPM / 1,500 RPD).',
   },
   {
     id: 'gemini-3.5-flash',
     name: 'Gemini 3.5 Flash (Workhorse Free Tier)',
     provider: 'gemini',
-    badge: 'Free Workhorse',
+    badge: 'Free 3.5 Flash',
     isCodeSuited: true,
     isReasoning: true,
     isFree: true,
     description: 'Reliable fallback code execution and boolean solid modeling (~15 RPM / 1,500 RPD).',
   },
   {
-    id: 'gemini-3.5-flash-lite',
-    name: 'Gemini 3.5 Flash-Lite (Ultra-Fast Free Tier)',
+    id: 'gemini-3.6-flash',
+    name: 'Gemini 3.6 Flash (Next-Gen Free Tier)',
     provider: 'gemini',
-    badge: 'Free Lite',
-    isCodeSuited: true,
-    isFree: true,
-    description: 'Ultra-fast lightweight model for parameter modifications & primitive drafting (~15 RPM / 1,500 RPD).',
-  },
-  {
-    id: 'gemini-3.1-flash-lite',
-    name: 'Gemini 3.1 Flash-Lite (High-Throughput Free Tier)',
-    provider: 'gemini',
-    badge: 'High Speed',
-    isCodeSuited: true,
-    isFree: true,
-    description: 'High-throughput subagent model for quick geometry edits (~15 RPM / 1,500 RPD).',
-  },
-  {
-    id: 'gemini-2.5-flash',
-    name: 'Gemini 2.5 Flash (Stable Free Tier)',
-    provider: 'gemini',
-    badge: 'Free Code',
+    badge: 'Free 3.6 Flash',
     isCodeSuited: true,
     isReasoning: true,
     isFree: true,
-    description: 'Stable legacy Flash model for general-purpose fallback generation.',
+    description: 'Ultra-fast, high-throughput model for instant parametric CAD generation and edits (~15 RPM / 1,500 RPD).',
   },
   {
-    id: 'gemini-2.5-flash-lite',
-    name: 'Gemini 2.5 Flash-Lite (Low-Latency Free Tier)',
+    id: 'gemini-3.7-flash',
+    name: 'Gemini 3.7 Flash (Hybrid Free Tier)',
     provider: 'gemini',
-    badge: 'Free Lite',
+    badge: 'Free 3.7 Hybrid',
     isCodeSuited: true,
+    isReasoning: true,
     isFree: true,
-    description: 'Low-latency legacy model with fast token output.',
+    description: 'Deep hybrid reasoning model for complex CSG booleans and step-by-step CAD math (~15 RPM / 1,500 RPD).',
   },
   {
     id: 'gemma-4-31b-it',
     name: 'Gemma 4 31B (Google Open Weights Free Tier)',
     provider: 'gemini',
-    badge: 'Free Gemma',
+    badge: 'Free Gemma 31B',
     isCodeSuited: true,
     isReasoning: true,
     isFree: true,
     description: 'Google open-weights model for mathematical & constraint reasoning (~15 RPM / 1,500 RPD).',
-  },
-  {
-    id: 'nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free',
-    name: 'NVIDIA Nemotron 3 Reasoning (100% Free)',
-    provider: 'openrouter',
-    badge: 'Free Reasoning',
-    isFree: true,
-    isReasoning: true,
-    description: 'Free NVIDIA reasoning model on OpenRouter for geometric constraint calculations.',
-  },
-  {
-    id: 'cohere/north-mini-code:free',
-    name: 'Cohere North Mini Code (100% Free)',
-    provider: 'openrouter',
-    badge: 'Free Code',
-    isFree: true,
-    isCodeSuited: true,
-    description: 'Free code-specialized model on OpenRouter, ideal for CAD scripting at zero cost.',
-  },
-  {
-    id: 'google/gemma-4-31b-it:free',
-    name: 'Google Gemma 4 31B (100% Free)',
-    provider: 'openrouter',
-    badge: 'Free Gemma',
-    isFree: true,
-    isCodeSuited: true,
-    description: 'Free high-parameter instruction model on OpenRouter with broad mathematical capabilities.',
-  },
-  {
-    id: 'z-ai/glm-5.2:free',
-    name: 'Z.ai GLM 5.2 (100% Free)',
-    provider: 'openrouter',
-    badge: 'Free GLM',
-    isFree: true,
-    isReasoning: true,
-    description: 'Free high-parameter model on OpenRouter for mathematical analysis.',
-  },
-  {
-    id: 'openrouter/free',
-    name: 'OpenRouter Free Router (100% Free)',
-    provider: 'openrouter',
-    badge: 'Auto Free',
-    isFree: true,
-    description: 'Automatically routes requests to available free models on OpenRouter.',
   },
 ];
 
@@ -576,6 +598,7 @@ export function extractThoughtBlock(text: string, durationMs = 3000): ThoughtBlo
 }
 
 export function extractClarification(text: string): ClarificationQuestion | undefined {
+  // 1. Tagged clarification
   const match = text.match(/<clarification\s+question="([^"]+)"(?:\s+options="([^"]+)")?>([\s\S]*?)<\/clarification>/i);
   if (match) {
     const question = match[1].trim();
@@ -584,6 +607,40 @@ export function extractClarification(text: string): ClarificationQuestion | unde
     const options = optionsRaw ? optionsRaw.split(',').map((o) => o.trim()).filter(Boolean) : [];
     return { question, options, explanation };
   }
+
+  // 2. Natural language clarification fallback if model asked questions with options
+  const lines = text.split('\n');
+  let detectedQuestion = '';
+  const detectedOptions: string[] = [];
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (
+      trimmed.endsWith('?') &&
+      (trimmed.toLowerCase().includes('which') ||
+        trimmed.toLowerCase().includes('would you like') ||
+        trimmed.toLowerCase().includes('what size') ||
+        trimmed.toLowerCase().includes('standard') ||
+        trimmed.toLowerCase().includes('dimensions') ||
+        trimmed.toLowerCase().includes('prefer'))
+    ) {
+      detectedQuestion = trimmed.replace(/^[#*-\s]+/, '');
+    } else if (detectedQuestion && (trimmed.match(/^(\d+\.|\*|-)\s+/) || trimmed.startsWith('•'))) {
+      const optText = trimmed.replace(/^(\d+\.|\*|-|•)\s*/, '').trim();
+      if (optText.length > 1 && optText.length < 80) {
+        detectedOptions.push(optText);
+      }
+    }
+  }
+
+  if (detectedQuestion && detectedOptions.length >= 2) {
+    return {
+      question: detectedQuestion,
+      options: detectedOptions.slice(0, 5),
+      explanation: 'Select one of the suggested configurations to refine or re-synthesize your CAD solid.',
+    };
+  }
+
   return undefined;
 }
 
@@ -815,25 +872,29 @@ export async function generateCADCode(params: GenerateCADParams): Promise<Genera
     return (a.failedCalls || 0) - (b.failedCalls || 0);
   };
 
-  primaryKeys.sort(sortFn);
-  secondaryKeys.sort(sortFn);
+  // User Priority Contract: FIRST OpenRouter, THEN Gemini
+  const openrouterKeys = keyPool.filter((k) => k.provider === 'openrouter' && k.isActive);
+  const geminiKeys = keyPool.filter((k) => k.provider === 'gemini' && k.isActive);
 
-  // If primary has no healthy keys and secondary does, prioritize secondary
-  const primaryHealthy = primaryKeys.filter((k) => !k.isRateLimited || (k.rateLimitedUntil || 0) <= now);
-  const secondaryHealthy = secondaryKeys.filter((k) => !k.isRateLimited || (k.rateLimitedUntil || 0) <= now);
+  openrouterKeys.sort(sortFn);
+  geminiKeys.sort(sortFn);
+
+  const openrouterHealthy = openrouterKeys.filter((k) => !k.isRateLimited || (k.rateLimitedUntil || 0) <= now);
+  const geminiHealthy = geminiKeys.filter((k) => !k.isRateLimited || (k.rateLimitedUntil || 0) <= now);
 
   let candidateAttempts: Array<{ key: APIKeyEntry; provider: 'gemini' | 'openrouter'; isCrossProvider: boolean }> = [];
 
-  if (primaryHealthy.length > 0 || secondaryHealthy.length === 0) {
+  // Prioritize OpenRouter first if healthy or if no Gemini keys available
+  if (openrouterHealthy.length > 0 || geminiHealthy.length === 0) {
     candidateAttempts = [
-      ...primaryKeys.map((k) => ({ key: k, provider: primaryProvider, isCrossProvider: false })),
-      ...secondaryKeys.map((k) => ({ key: k, provider: secondaryProvider, isCrossProvider: true })),
+      ...openrouterKeys.map((k) => ({ key: k, provider: 'openrouter' as const, isCrossProvider: routingDecision.provider !== 'openrouter' })),
+      ...geminiKeys.map((k) => ({ key: k, provider: 'gemini' as const, isCrossProvider: routingDecision.provider !== 'gemini' })),
     ];
   } else {
-    // Primary is rate limited, secondary is ready!
+    // If OpenRouter keys are rate limited, fallback to Gemini
     candidateAttempts = [
-      ...secondaryKeys.map((k) => ({ key: k, provider: secondaryProvider, isCrossProvider: true })),
-      ...primaryKeys.map((k) => ({ key: k, provider: primaryProvider, isCrossProvider: false })),
+      ...geminiKeys.map((k) => ({ key: k, provider: 'gemini' as const, isCrossProvider: routingDecision.provider !== 'gemini' })),
+      ...openrouterKeys.map((k) => ({ key: k, provider: 'openrouter' as const, isCrossProvider: routingDecision.provider !== 'openrouter' })),
     ];
   }
 

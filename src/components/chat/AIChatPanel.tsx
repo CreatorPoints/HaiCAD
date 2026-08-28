@@ -398,7 +398,28 @@ export const AIChatPanel: React.FC<AIChatPanelProps> = ({
                 }`}
               >
                 {/* Content Text */}
-                <p className="text-xs whitespace-pre-wrap">{msg.content}</p>
+                {(() => {
+                  if (isUser) {
+                    return <p className="text-xs whitespace-pre-wrap">{msg.content}</p>;
+                  }
+                  const cleanText = msg.content
+                    .replace(/<thought>[\s\S]*?<\/thought>/gi, '')
+                    .replace(/<clarification[\s\S]*?<\/clarification>/gi, '')
+                    .replace(/```(?:javascript|js|typescript)?[\s\S]*?```/gi, '')
+                    .trim();
+
+                  if (cleanText) {
+                    return <p className="text-xs whitespace-pre-wrap">{cleanText}</p>;
+                  }
+                  if (msg.codeSnippet) {
+                    return (
+                      <p className="text-xs text-slate-300">
+                        Generated parametric 3D solid based on your specifications.
+                      </p>
+                    );
+                  }
+                  return null;
+                })()}
 
                 {/* Tool Call Activity Cards (WebSearch, Grounding, Kernel) */}
                 {!isUser && msg.toolCalls && msg.toolCalls.length > 0 && (
@@ -444,7 +465,7 @@ export const AIChatPanel: React.FC<AIChatPanelProps> = ({
                     <button
                       type="button"
                       onClick={() => toggleThought(msg.id)}
-                      className="w-full px-3 py-2 flex items-center justify-between text-purple-300 hover:text-white bg-purple-950/30 font-mono text-[10px] transition-colors"
+                      className="w-full px-3 py-2 flex items-center justify-between text-purple-300 hover:text-white bg-purple-950/30 font-mono text-[10px] transition-colors cursor-pointer"
                     >
                       <div className="flex items-center gap-1.5">
                         <Brain className="w-3.5 h-3.5 text-purple-400" />
@@ -468,26 +489,34 @@ export const AIChatPanel: React.FC<AIChatPanelProps> = ({
 
                 {/* Interactive Clarification Card (Ask If in Doubt) */}
                 {!isUser && msg.clarification && (
-                  <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/30 space-y-2 text-xs">
+                  <div className="p-3.5 rounded-xl bg-gradient-to-r from-amber-500/15 to-cyan-500/10 border border-amber-500/40 space-y-2.5 text-xs shadow-md">
                     <div className="flex items-center gap-1.5 text-amber-300 font-bold font-mono text-[11px]">
-                      <HelpCircle className="w-3.5 h-3.5" />
+                      <HelpCircle className="w-4 h-4 text-amber-400 shrink-0" />
                       <span>{msg.clarification.question}</span>
                     </div>
                     {msg.clarification.explanation && (
-                      <p className="text-slate-300 text-[10px]">{msg.clarification.explanation}</p>
+                      <p className="text-slate-300 text-[11px] leading-relaxed pl-5 border-l border-amber-500/30">
+                        {msg.clarification.explanation}
+                      </p>
                     )}
                     {msg.clarification.options.length > 0 && (
-                      <div className="flex flex-wrap gap-1.5 pt-1">
-                        {msg.clarification.options.map((opt, oIdx) => (
-                          <button
-                            key={oIdx}
-                            type="button"
-                            onClick={() => onSendMessage(opt, selectedModel)}
-                            className="px-2.5 py-1 rounded-lg bg-surface border border-amber-500/40 text-amber-200 hover:bg-amber-500/20 hover:text-white text-[11px] font-mono transition-all shadow-sm"
-                          >
-                            {opt}
-                          </button>
-                        ))}
+                      <div className="space-y-1.5 pt-1">
+                        <span className="text-[10px] font-mono text-amber-400/80 uppercase font-semibold block">
+                          Suggested Options (Click to select):
+                        </span>
+                        <div className="flex flex-wrap gap-2">
+                          {msg.clarification.options.map((opt, oIdx) => (
+                            <button
+                              key={oIdx}
+                              type="button"
+                              onClick={() => onSendMessage(opt, selectedModel)}
+                              className="px-3 py-1.5 rounded-xl bg-surface/90 border border-amber-500/40 text-amber-200 hover:bg-amber-500/25 hover:text-white hover:border-amber-400 text-[11px] font-mono transition-all shadow-sm flex items-center gap-1.5 group cursor-pointer"
+                            >
+                              <span className="w-1.5 h-1.5 rounded-full bg-amber-400 group-hover:scale-125 transition-transform" />
+                              <span>{opt}</span>
+                            </button>
+                          ))}
+                        </div>
                       </div>
                     )}
                   </div>
