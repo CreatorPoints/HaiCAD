@@ -3,7 +3,7 @@
  * 
  * Implements:
  * 1. Strict State Machine: planning -> base -> cutouts -> features -> finalizing -> export
- * 2. Real-time Live IDE Script Awareness (knows what is in the editor)
+ * 2. Real-time Live IDE Script Awareness & Auto-Execution (instantly edits workspace code & recompiles)
  * 3. Conversational Planning & Context Awareness
  * 4. Step-by-step modular Replicad code generation & modification
  * 5. Self-Correction Loop with up to 3 automated retries upon Web Worker compilation/geometry failure
@@ -233,18 +233,22 @@ export function useAiCad(config: AiCadConfig = {}) {
         let lastErrorMsg = '';
 
         while (attempt < MAX_AUTO_RETRIES) {
-          // Update registry candidate
-          const testRegistry = { ...phaseCodeRegistry.current };
-          if (targetPhase === 'base') testRegistry.buildBaseCode = candidateCode;
-          if (targetPhase === 'cutouts') testRegistry.addCutoutsCode = candidateCode;
-          if (targetPhase === 'features') testRegistry.addFeaturesCode = candidateCode;
-          if (targetPhase === 'finalizing') testRegistry.finalizeModelCode = candidateCode;
+          // Check if candidateCode is a full standalone script or modular function
+          if (candidateCode.includes('function main') || candidateCode.includes('main(')) {
+            finalAssembledScript = candidateCode;
+          } else {
+            const testRegistry = { ...phaseCodeRegistry.current };
+            if (targetPhase === 'base') testRegistry.buildBaseCode = candidateCode;
+            if (targetPhase === 'cutouts') testRegistry.addCutoutsCode = candidateCode;
+            if (targetPhase === 'features') testRegistry.addFeaturesCode = candidateCode;
+            if (targetPhase === 'finalizing') testRegistry.finalizeModelCode = candidateCode;
 
-          finalAssembledScript = assembleReplicadScript(
-            designParams,
-            testRegistry,
-            targetPhase
-          );
+            finalAssembledScript = assembleReplicadScript(
+              designParams,
+              testRegistry,
+              targetPhase
+            );
+          }
 
           // Evaluate candidate code in worker
           const evalResult = await evaluateInWorker(finalAssembledScript);
@@ -252,7 +256,12 @@ export function useAiCad(config: AiCadConfig = {}) {
           if (evalResult.success) {
             compilationSuccess = true;
             setCurrentCode(finalAssembledScript);
-            phaseCodeRegistry.current = testRegistry;
+            if (!candidateCode.includes('function main')) {
+              if (targetPhase === 'base') phaseCodeRegistry.current.buildBaseCode = candidateCode;
+              if (targetPhase === 'cutouts') phaseCodeRegistry.current.addCutoutsCode = candidateCode;
+              if (targetPhase === 'features') phaseCodeRegistry.current.addFeaturesCode = candidateCode;
+              if (targetPhase === 'finalizing') phaseCodeRegistry.current.finalizeModelCode = candidateCode;
+            }
             break;
           }
 
@@ -344,7 +353,7 @@ export function useAiCad(config: AiCadConfig = {}) {
   );
 
   /**
-   * Handles user text input across all phases with live editor context awareness
+   * Handles user text input across all phases with live editor context awareness & direct code execution
    */
   const sendMessage = useCallback(
     async (userInput: string) => {
@@ -417,6 +426,34 @@ export function useAiCad(config: AiCadConfig = {}) {
             }));
           }
 
+          // Check if the response contains executable code (e.g. from a direct modification request like "remove holes")
+          const rawCode = extractCodeBlock(response);
+          if (rawCode && (rawCode.includes('function main') || rawCode.includes('main('))) {
+            const evalResult = await evaluateInWorker(rawCode);
+            if (evalResult.success) {
+              setCurrentCode(rawCode);
+              setPhase('base');
+              setNeedsVerification(true);
+              setPendingVerificationPhase('base');
+
+              // Clean conversational text (strip json)
+              const conversationalText = response
+                .replace(/```(?:json)?\s*\{[\s\S]*?\}\s*```/g, '')
+                .trim();
+
+              addMessage({
+                role: 'assistant',
+                phase: 'base',
+                codeSnippet: rawCode,
+                modelUsed: usedAiModel,
+                needsVerification: true,
+                content: `${conversationalText}\n\n**CAD model updated in workspace. Verify geometry? (Yes/No/Modify)**`,
+                suggestedOptions: ['Yes (Proceed)', 'No (Regenerate)', 'Modify with Notes'],
+              });
+              return;
+            }
+          }
+
           // Clean conversational response text (strip the JSON metadata from view)
           const conversationalText = response
             .replace(/```(?:json)?\s*\{[\s\S]*?\}\s*```/g, '')
@@ -469,6 +506,7 @@ export function useAiCad(config: AiCadConfig = {}) {
       model,
       addMessage,
       generateAndVerifyPhaseCode,
+      evaluateInWorker,
       handleModelCycle,
     ]
   );

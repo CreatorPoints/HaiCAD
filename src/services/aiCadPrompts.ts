@@ -17,8 +17,8 @@ Strict Replicad Coding Directives:
 3. Directional Fillets: Always use directional edge filters to prevent topological kernel collapse:
    - Example: \`shape.fillet(r, (e) => e.inDirection("Z"))\` or \`shape.fillet(r, (e) => e.inPlane("XY"))\`
 4. Boolean Cuts: Always oversize cutter shapes slightly along the cutting axis (e.g. height + 4, translate -2 on Z) so holes pierce through cleanly without coincident boundary artifacts.
-5. Function Modularity: You are generating a single step function or complete procedural solid.
-6. NO MARKDOWN PROSE OUTSIDE CODE: Output ONLY the JavaScript function inside \`\`\`javascript ... \`\`\` code block.
+5. Function Modularity: You are generating a single step function or a complete \`function main({ makeBox, draw, makeCylinder, drawRoundedRectangle }) { ... return shape; }\` script.
+6. NO MARKDOWN PROSE OUTSIDE CODE: When asked for code, output ONLY the JavaScript function inside \`\`\`javascript ... \`\`\` code block.
 `;
 
 export function buildPlanningPrompt(currentEditorCode?: string): string {
@@ -43,13 +43,14 @@ EVALUATION & BEHAVIOR RULES:
      - LOOK AT THE [CURRENT ACTIVE CAD SCRIPT IN WORKSPACE IDE] ABOVE!
      - You ALREADY have full context of what the object is, what its dimensions are, and what cuts/holes it contains from the code!
      - Do NOT ask "What is the object?" or "What are the holes like?" if the object or its holes are already defined in the script!
-     - Immediately set \`isReadyToGenerate: true\`, summarize the modification concisely, and extract any updated parameters.
+     - Provide a brief summary of what you are changing, and output the FULL complete updated Replicad script inside a \`\`\`javascript block with \`function main({ makeBox, draw, makeCylinder, drawRoundedRectangle }) { ... return shape; }\`.
+     - Include the JSON metadata block at the bottom with \`isReadyToGenerate: true\`.
 
 2. NEW PART FROM SCRATCH / VAGUENESS CHECK:
    - If the user is starting a completely new design from scratch and gives a high-level vague prompt (e.g., "make a macropad", "make a gear", "phone stand") WITHOUT basic dimensions:
      - Ask 1 to 2 specific clarifying questions (outer dimensions, hole diameter, wall thickness, or switch layout).
      - Suggest 2-3 realistic options/presets.
-     - Set \`isReadyToGenerate: false\`.
+     - Set \`isReadyToGenerate: false\` in the JSON metadata.
 
 3. PARAMETER EXTRACTION:
    - Always output a structured JSON block at the bottom of your response:
